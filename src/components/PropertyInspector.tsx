@@ -221,6 +221,119 @@ export default function PropertyInspector({
               </>
             )}
 
+            {/* Section Content Fields */}
+            {type === 'Section' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Section Title</label>
+                  <input
+                    type="text"
+                    value={props.sectionTitle || ''}
+                    onChange={(e) => updateProp('sectionTitle', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtitle / Description</label>
+                  <textarea
+                    rows={3}
+                    value={props.subtitle || ''}
+                    onChange={(e) => updateProp('subtitle', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Navbar Content Fields */}
+            {type === 'Navbar' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Brand Logo Text</label>
+                  <input
+                    type="text"
+                    value={props.logoText || ''}
+                    onChange={(e) => updateProp('logoText', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Button CTA Text</label>
+                  <input
+                    type="text"
+                    value={props.buttonText || ''}
+                    onChange={(e) => updateProp('buttonText', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Navigation Links</label>
+                  {(props.links || ['Home', 'About', 'Services', 'Contact']).map((link, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={link}
+                      onChange={(e) => {
+                        const newLinks = [...(props.links || ['Home', 'About', 'Services', 'Contact'])];
+                        newLinks[idx] = e.target.value;
+                        updateProp('links', newLinks);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Footer Content Fields */}
+            {type === 'Footer' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Brand Logo Text</label>
+                  <input
+                    type="text"
+                    value={props.logoText || ''}
+                    onChange={(e) => updateProp('logoText', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Description</label>
+                  <input
+                    type="text"
+                    value={props.description || ''}
+                    onChange={(e) => updateProp('description', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Copyright Text</label>
+                  <input
+                    type="text"
+                    value={props.copyrightText || ''}
+                    onChange={(e) => updateProp('copyrightText', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Footer Links</label>
+                  {(props.links || ['Privacy Policy', 'Terms of Service', 'Contact Us']).map((link, idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={link}
+                      onChange={(e) => {
+                        const newLinks = [...(props.links || ['Privacy Policy', 'Terms of Service', 'Contact Us'])];
+                        newLinks[idx] = e.target.value;
+                        updateProp('links', newLinks);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
             {/* Card Content Fields */}
             {type === 'Card' && (
               <>
@@ -727,6 +840,39 @@ export default function PropertyInspector({
         {activeTab === 'layout' && (
           <div className="space-y-4">
             
+            {/* Grid Dimensions */}
+            {type === 'Grid' && (
+              <div className="space-y-4 border-b border-zinc-800 pb-4 mb-4">
+                <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
+                  <Grid className="w-3.5 h-3.5 text-amber-400" /> Grid Dimensions
+                </label>
+                <div className="flex gap-2">
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[9px] text-zinc-500 font-semibold uppercase">Columns</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={props.columns || 3}
+                      onChange={(e) => updateProp('columns', parseInt(e.target.value) || 1)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="text-[9px] text-zinc-500 font-semibold uppercase">Rows</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={props.rows || 1}
+                      onChange={(e) => updateProp('rows', parseInt(e.target.value) || 1)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Component Paddings */}
             <div className="space-y-4">
               <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">

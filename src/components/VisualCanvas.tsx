@@ -13,6 +13,11 @@ import type { CanvasComponent, BreakpointType, ComponentProps, PageSettings } fr
 import ThreeDModelViewer from './ThreeDModelViewer';
 import BackgroundEngine from './BackgroundEngine';
 
+interface SnapLine {
+  type: 'h' | 'v';
+  coord: number;
+}
+
 interface VisualCanvasProps {
   components: CanvasComponent[];
   selectedId: string | null;
@@ -44,6 +49,7 @@ export default function VisualCanvas({
   const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
   const domNodesRef = useRef<{[id: string]: HTMLDivElement | null}>({});
   const [, forceUpdate] = useState({});
+  const [activeGuides, setActiveGuides] = useState<SnapLine[]>([]);
 
   // Trigger manual handles re-draw when selected node moves
   useEffect(() => {
@@ -112,6 +118,151 @@ export default function VisualCanvas({
     return `${spacing} ${design} ${flex} ${lh}`.trim().replace(/\s+/g, ' ');
   };
 
+  // Snapping calculations engine
+  const getSnapGrid = (
+    draggingId: string,
+    proposedLeft: number,
+    proposedTop: number,
+    compWidth: number,
+    compHeight: number
+  ) => {
+    const snapThreshold = 10;
+    let snappedLeft = proposedLeft;
+    let snappedTop = proposedTop;
+    const guides: SnapLine[] = [];
+
+    // Filter top-level components that are NOT the dragged component
+    const otherComps = components.filter(c => c.id !== draggingId);
+
+    let verticalSnapped = false;
+    let horizontalSnapped = false;
+
+    // 1. Calculate Snapped Coordinates
+    for (const other of otherComps) {
+      const otherEl = domNodesRef.current[other.id];
+      if (!otherEl) continue;
+
+      const otherLeft = other.props.left !== undefined ? other.props.left : 100;
+      const otherTop = other.props.top !== undefined ? other.props.top : 120;
+      const otherWidth = otherEl.offsetWidth;
+      const otherHeight = otherEl.offsetHeight;
+
+      const otherRight = otherLeft + otherWidth;
+      const otherCenterX = otherLeft + otherWidth / 2;
+      const compCenterX = proposedLeft + compWidth / 2;
+      const compRight = proposedLeft + compWidth;
+
+      if (!verticalSnapped) {
+        if (Math.abs(proposedLeft - otherLeft) < snapThreshold) {
+          snappedLeft = otherLeft;
+          verticalSnapped = true;
+        } else if (Math.abs(compRight - otherRight) < snapThreshold) {
+          snappedLeft = otherRight - compWidth;
+          verticalSnapped = true;
+        } else if (Math.abs(compCenterX - otherCenterX) < snapThreshold) {
+          snappedLeft = otherCenterX - compWidth / 2;
+          verticalSnapped = true;
+        } else if (Math.abs(proposedLeft - otherRight) < snapThreshold) {
+          snappedLeft = otherRight;
+          verticalSnapped = true;
+        } else if (Math.abs(compRight - otherLeft) < snapThreshold) {
+          snappedLeft = otherLeft - compWidth;
+          verticalSnapped = true;
+        }
+      }
+
+      const otherBottom = otherTop + otherHeight;
+      const otherCenterY = otherTop + otherHeight / 2;
+      const compCenterY = proposedTop + compHeight / 2;
+      const compBottom = proposedTop + compHeight;
+
+      if (!horizontalSnapped) {
+        if (Math.abs(proposedTop - otherTop) < snapThreshold) {
+          snappedTop = otherTop;
+          horizontalSnapped = true;
+        } else if (Math.abs(compBottom - otherBottom) < snapThreshold) {
+          snappedTop = otherBottom - compHeight;
+          horizontalSnapped = true;
+        } else if (Math.abs(compCenterY - otherCenterY) < snapThreshold) {
+          snappedTop = otherCenterY - compHeight / 2;
+          horizontalSnapped = true;
+        } else if (Math.abs(proposedTop - otherBottom) < snapThreshold) {
+          snappedTop = otherBottom;
+          horizontalSnapped = true;
+        } else if (Math.abs(compBottom - otherTop) < snapThreshold) {
+          snappedTop = otherTop - compHeight;
+          horizontalSnapped = true;
+        }
+      }
+    }
+
+    // 2. Accumulate matching guidelines at the snapped position
+    if (verticalSnapped || horizontalSnapped) {
+      const snappedCompCenterX = snappedLeft + compWidth / 2;
+      const snappedCompRight = snappedLeft + compWidth;
+      const snappedCompCenterY = snappedTop + compHeight / 2;
+      const snappedCompBottom = snappedTop + compHeight;
+
+      for (const other of otherComps) {
+        const otherEl = domNodesRef.current[other.id];
+        if (!otherEl) continue;
+
+        const otherLeft = other.props.left !== undefined ? other.props.left : 100;
+        const otherTop = other.props.top !== undefined ? other.props.top : 120;
+        const otherWidth = otherEl.offsetWidth;
+        const otherHeight = otherEl.offsetHeight;
+
+        const otherRight = otherLeft + otherWidth;
+        const otherCenterX = otherLeft + otherWidth / 2;
+        const otherBottom = otherTop + otherHeight;
+        const otherCenterY = otherTop + otherHeight / 2;
+
+        // Check vertical alignments
+        if (
+          Math.abs(snappedLeft - otherLeft) < 1 ||
+          Math.abs(snappedLeft - otherRight) < 1 ||
+          Math.abs(snappedCompCenterX - otherCenterX) < 1 ||
+          Math.abs(snappedCompRight - otherLeft) < 1 ||
+          Math.abs(snappedCompRight - otherRight) < 1
+        ) {
+          const matchX = Math.abs(snappedLeft - otherLeft) < 1 ? otherLeft :
+                         Math.abs(snappedLeft - otherRight) < 1 ? otherRight :
+                         Math.abs(snappedCompCenterX - otherCenterX) < 1 ? otherCenterX :
+                         Math.abs(snappedCompRight - otherLeft) < 1 ? otherLeft : otherRight;
+          guides.push({ type: 'v', coord: matchX });
+        }
+
+        // Check horizontal alignments
+        if (
+          Math.abs(snappedTop - otherTop) < 1 ||
+          Math.abs(snappedTop - otherBottom) < 1 ||
+          Math.abs(snappedCompCenterY - otherCenterY) < 1 ||
+          Math.abs(snappedCompBottom - otherTop) < 1 ||
+          Math.abs(snappedCompBottom - otherBottom) < 1
+        ) {
+          const matchY = Math.abs(snappedTop - otherTop) < 1 ? otherTop :
+                         Math.abs(snappedTop - otherBottom) < 1 ? otherBottom :
+                         Math.abs(snappedCompCenterY - otherCenterY) < 1 ? otherCenterY :
+                         Math.abs(snappedCompBottom - otherTop) < 1 ? otherTop : otherBottom;
+          guides.push({ type: 'h', coord: matchY });
+        }
+      }
+    }
+
+    // Deduplicate
+    const uniqueGuides: SnapLine[] = [];
+    const seen = new Set<string>();
+    for (const g of guides) {
+      const key = `${g.type}-${g.coord}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueGuides.push(g);
+      }
+    }
+
+    return { snappedLeft, snappedTop, guides: uniqueGuides };
+  };
+
   // Draggable Absolute Position logic
   const handleMoveStart = (e: MouseEvent, comp: CanvasComponent) => {
     if (e.button !== 0) return; // Left click only
@@ -135,19 +286,39 @@ export default function VisualCanvas({
     const initialTop = comp.props.top !== undefined ? comp.props.top : 120;
     const initialLeft = comp.props.left !== undefined ? comp.props.left : 100;
 
+    // Cache the dragged element's actual dimensions on drag start
+    const compEl = domNodesRef.current[comp.id];
+    const compWidth = compEl ? compEl.offsetWidth : parseInt(comp.props.width || '') || 320;
+    const compHeight = compEl ? compEl.offsetHeight : parseInt(comp.props.height || '') || 120;
+
     const handleWindowMouseMove = (moveEvent: globalThis.MouseEvent) => {
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
 
+      const proposedLeft = Math.max(0, initialLeft + dx);
+      const proposedTop = Math.max(0, initialTop + dy);
+
+      const { snappedLeft, snappedTop, guides } = getSnapGrid(
+        comp.id,
+        proposedLeft,
+        proposedTop,
+        compWidth,
+        compHeight
+      );
+
+      setActiveGuides(guides);
+
       onUpdateComponentProps(comp.id, {
-        top: Math.max(0, initialTop + dy),
-        left: Math.max(0, initialLeft + dx),
+        top: snappedTop,
+        left: snappedLeft,
       });
     };
 
     const handleWindowMouseUp = () => {
+      setActiveGuides([]); // Clear guidelines
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
+      // Optional: we can add a history commit here, but for now we skip to avoid refactoring props.
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
@@ -458,7 +629,9 @@ export default function VisualCanvas({
 
         case 'Grid': {
           const columns = p.columns || 3;
+          const rows = p.rows || 1;
           const colClass = `grid-cols-1 md:grid-cols-${columns}`;
+          const rowClass = rows > 1 ? `grid-rows-${rows}` : '';
           const gapClass = p.gap || 'gap-6';
 
           return (
@@ -472,7 +645,7 @@ export default function VisualCanvas({
                 <span>Drop Zone</span>
               </div>
               
-              <div className={`grid ${colClass} ${gapClass} ${classList} w-full h-full min-h-[80px]`}>
+              <div className={`grid ${colClass} ${rowClass} ${gapClass} ${classList} w-full h-full min-h-[80px]`}>
                 {(c.children || []).length > 0 ? (
                   c.children!.map((child) => renderComponent(child, true))
                 ) : (
@@ -496,6 +669,50 @@ export default function VisualCanvas({
                 interactive={!!p.modelInteractive}
               />
             </div>
+          );
+        }
+
+        case 'Section': {
+          return (
+            <section className={`${classList} flex flex-col items-center justify-center w-full h-full select-none cursor-grab active:cursor-grabbing text-center`}>
+              <h2 className="text-3xl font-bold mb-4">{p.sectionTitle || 'Section Title'}</h2>
+              <p className="text-sm max-w-2xl mx-auto opacity-80">{p.subtitle || 'Subtitle text goes here.'}</p>
+            </section>
+          );
+        }
+
+        case 'Navbar': {
+          const links = p.links || ['Home', 'About', 'Services', 'Contact'];
+          return (
+            <nav className={`${classList} flex items-center justify-between w-full h-full select-none cursor-grab active:cursor-grabbing`}>
+              <div className="font-bold text-xl tracking-tight">{p.logoText || 'BrandLogo'}</div>
+              <div className="hidden md:flex items-center gap-6 text-sm font-medium">
+                {links.map((link, idx) => (
+                  <span key={idx} className="hover:opacity-75 transition-opacity">{link}</span>
+                ))}
+              </div>
+              {p.buttonText && (
+                <button className="px-4 py-2 text-sm font-semibold rounded bg-white text-zinc-950 hover:bg-zinc-200 transition-all pointer-events-none">
+                  {p.buttonText}
+                </button>
+              )}
+            </nav>
+          );
+        }
+
+        case 'Footer': {
+          const links = p.links || ['Privacy Policy', 'Terms of Service', 'Contact Us'];
+          return (
+            <footer className={`${classList} flex flex-col items-center justify-center w-full h-full select-none cursor-grab active:cursor-grabbing text-center gap-6`}>
+              <div className="font-bold text-2xl tracking-tight">{p.logoText || 'BrandLogo'}</div>
+              <p className="text-sm opacity-80 max-w-md mx-auto">{p.description || 'Building amazing experiences on the web.'}</p>
+              <div className="flex items-center justify-center gap-4 text-xs font-medium w-full">
+                {links.map((link, idx) => (
+                  <span key={idx} className="hover:opacity-75 transition-opacity underline-offset-4 hover:underline">{link}</span>
+                ))}
+              </div>
+              <div className="text-xs opacity-50 mt-4">{p.copyrightText || '© 2026 DevCanvas. All rights reserved.'}</div>
+            </footer>
           );
         }
 
@@ -613,6 +830,22 @@ export default function VisualCanvas({
               onDrop={(e) => handleCanvasDrop(e)}
               className="w-full min-h-full relative overflow-y-auto min-h-[600px] border border-zinc-900/30 rounded-xl"
             >
+              {/* Snap alignment guidelines */}
+              {activeGuides.map((guide, idx) => (
+                <div
+                  key={idx}
+                  className="absolute border-red-500 pointer-events-none z-[9999]"
+                  style={{
+                    borderStyle: 'dashed',
+                    borderWidth: guide.type === 'h' ? '1.5px 0 0 0' : '0 0 0 1.5px',
+                    top: guide.type === 'h' ? `${guide.coord}px` : '0px',
+                    left: guide.type === 'v' ? `${guide.coord}px` : '0px',
+                    width: guide.type === 'h' ? '100%' : '1.5px',
+                    height: guide.type === 'v' ? '100%' : '1.5px',
+                  }}
+                />
+              ))}
+
               {components.length > 0 ? (
                 components.map((comp) => renderComponent(comp))
               ) : (
@@ -643,6 +876,22 @@ export default function VisualCanvas({
                   onDrop={(e) => handleCanvasDrop(e)}
                   className="flex-1 relative overflow-y-auto px-4 py-8 bg-stone-950 mt-1.5 min-h-[450px]"
                 >
+                  {/* Snap alignment guidelines */}
+                  {activeGuides.map((guide, idx) => (
+                    <div
+                      key={idx}
+                      className="absolute border-red-500 pointer-events-none z-[9999]"
+                      style={{
+                        borderStyle: 'dashed',
+                        borderWidth: guide.type === 'h' ? '1.5px 0 0 0' : '0 0 0 1.5px',
+                        top: guide.type === 'h' ? `${guide.coord}px` : '0px',
+                        left: guide.type === 'v' ? `${guide.coord}px` : '0px',
+                        width: guide.type === 'h' ? '100%' : '1.5px',
+                        height: guide.type === 'v' ? '100%' : '1.5px',
+                      }}
+                    />
+                  ))}
+
                   {components.length > 0 ? (
                     components.map((comp) => renderComponent(comp))
                   ) : (

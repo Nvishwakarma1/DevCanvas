@@ -123,15 +123,53 @@ ${indent}</form>`;
 
     case 'Grid': {
       const colClass = `grid-cols-1 md:grid-cols-${p.columns || 3}`;
+      const rowClass = p.rows && p.rows > 1 ? `grid-rows-${p.rows}` : '';
       const gapClass = p.gap || 'gap-6';
       
       const childrenHtml = (component.children || []).map(child => 
         generateComponentHtml(child, indentLevel + 1, false)
       ).join('\n');
 
-      return `${indent}<div class="grid ${colClass} ${gapClass} ${allStyleClasses} w-full"${inlineStyleAttr}>
+      return `${indent}<div class="grid ${colClass} ${rowClass} ${gapClass} ${allStyleClasses} w-full"${inlineStyleAttr}>
 ${childrenHtml}
 ${indent}</div>`;
+    }
+
+    case 'Section': {
+      return `${indent}<section class="${allStyleClasses} flex flex-col items-center justify-center w-full text-center"${inlineStyleAttr}>
+${indent}  <h2 class="text-3xl font-bold mb-4">${p.sectionTitle || 'Section Title'}</h2>
+${indent}  <p class="text-sm max-w-2xl mx-auto opacity-80">${p.subtitle || 'Subtitle text goes here.'}</p>
+${indent}</section>`;
+    }
+
+    case 'Navbar': {
+      const linksHtml = (p.links || ['Home', 'About', 'Services', 'Contact']).map(link => 
+        `<a href="#" class="hover:opacity-75 transition-opacity">${link}</a>`
+      ).join(`\n${indent}    `);
+
+      const btnHtml = p.buttonText ? `\n${indent}  <button class="px-4 py-2 text-sm font-semibold rounded bg-white text-zinc-950 hover:bg-zinc-200 transition-all">${p.buttonText}</button>` : '';
+
+      return `${indent}<nav class="${allStyleClasses} flex items-center justify-between w-full"${inlineStyleAttr}>
+${indent}  <div class="font-bold text-xl tracking-tight">${p.logoText || 'BrandLogo'}</div>
+${indent}  <div class="hidden md:flex items-center gap-6 text-sm font-medium">
+${indent}    ${linksHtml}
+${indent}  </div>${btnHtml}
+${indent}</nav>`;
+    }
+
+    case 'Footer': {
+      const linksHtml = (p.links || ['Privacy Policy', 'Terms of Service', 'Contact Us']).map(link => 
+        `<a href="#" class="hover:opacity-75 transition-opacity underline-offset-4 hover:underline">${link}</a>`
+      ).join(`\n${indent}    `);
+
+      return `${indent}<footer class="${allStyleClasses} flex flex-col items-center justify-center w-full text-center gap-6"${inlineStyleAttr}>
+${indent}  <div class="font-bold text-2xl tracking-tight">${p.logoText || 'BrandLogo'}</div>
+${indent}  <p class="text-sm opacity-80 max-w-md mx-auto">${p.description || 'Building amazing experiences on the web.'}</p>
+${indent}  <div class="flex items-center justify-center gap-4 text-xs font-medium w-full">
+${indent}    ${linksHtml}
+${indent}  </div>
+${indent}  <div class="text-xs opacity-50 mt-4">${p.copyrightText || '© 2026 DevCanvas. All rights reserved.'}</div>
+${indent}</footer>`;
     }
 
     case 'ThreeDAsset': {
@@ -588,6 +626,9 @@ export function parseHtmlToComponents(html: string): CanvasComponent[] {
   const detectType = (el: Element): any | null => {
     const tagName = el.tagName;
     const classes = el.getAttribute('class') || '';
+    if (tagName === 'SECTION') return 'Section';
+    if (tagName === 'NAV') return 'Navbar';
+    if (tagName === 'FOOTER') return 'Footer';
     if (tagName === 'HEADER' || el.querySelector('header') || (classes.includes('flex') && el.querySelector('nav'))) return 'Header';
     if (tagName === 'FORM' || (classes.includes('max-w-md') && el.querySelector('input'))) return 'InputForm';
     if (classes.includes('grid')) return 'Grid';
@@ -649,6 +690,11 @@ export function parseHtmlToComponents(html: string): CanvasComponent[] {
       lineHeight: lineHeightMatch ? lineHeightMatch[0] : 'leading-normal'
     };
 
+    const rowMatch = classes.match(/grid-rows-(\d+)/);
+    const colMatch = classes.match(/grid-cols-(\d+)/);
+    if (rowMatch) props.rows = parseInt(rowMatch[1]);
+    if (colMatch) props.columns = parseInt(colMatch[1]);
+
     if (flexDirectionMatch) props.flexDirection = flexDirectionMatch[0];
     if (justifyContentMatch) props.justifyContent = justifyContentMatch[0];
     if (alignItemsMatch) props.alignItems = alignItemsMatch[0];
@@ -688,6 +734,27 @@ export function parseHtmlToComponents(html: string): CanvasComponent[] {
         props.modelAutoRotate = inner.getAttribute('data-autorotate') === 'true';
         props.modelInteractive = inner.getAttribute('data-interactive') === 'true';
       }
+    } else if (type === 'Section') {
+      const titleEl = el.querySelector('h2');
+      props.sectionTitle = titleEl ? titleEl.textContent?.trim() || '' : '';
+      const subEl = el.querySelector('p');
+      props.subtitle = subEl ? subEl.textContent?.trim() || '' : '';
+    } else if (type === 'Navbar') {
+      const logoEl = el.querySelector('.font-bold');
+      props.logoText = logoEl ? logoEl.textContent?.trim() || '' : '';
+      const btn = el.querySelector('button');
+      props.buttonText = btn ? btn.textContent?.trim() || '' : '';
+      const links = Array.from(el.querySelectorAll('a')).map(a => a.textContent?.trim() || '');
+      if (links.length > 0) props.links = links;
+    } else if (type === 'Footer') {
+      const logoEl = el.querySelector('.font-bold');
+      props.logoText = logoEl ? logoEl.textContent?.trim() || '' : '';
+      const descEl = el.querySelector('p:not(.text-xs)');
+      props.description = descEl ? descEl.textContent?.trim() || '' : '';
+      const links = Array.from(el.querySelectorAll('a')).map(a => a.textContent?.trim() || '');
+      if (links.length > 0) props.links = links;
+      const crEl = el.querySelector('.text-xs.opacity-50');
+      props.copyrightText = crEl ? crEl.textContent?.trim() || '' : '';
     }
 
     return props;

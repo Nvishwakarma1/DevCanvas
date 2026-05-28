@@ -1,4 +1,4 @@
-export type ComponentType = 'Header' | 'Card' | 'Button' | 'InputForm' | 'Grid' | 'ThreeDAsset';
+export type ComponentType = 'Header' | 'Card' | 'Button' | 'InputForm' | 'Grid' | 'ThreeDAsset' | 'Section' | 'Navbar' | 'Footer';
 
 export interface ComponentProps {
   // Spacing (Tailwind classes or pure names mapping to values)
@@ -38,6 +38,9 @@ export interface ComponentProps {
   buttonVariant?: 'solid' | 'outline' | 'ghost';
   imageUrl?: string;
   badgeText?: string;
+  copyrightText?: string;
+  sectionTitle?: string;
+  subtitle?: string;
   
   // Form properties
   formTitle?: string;
@@ -46,7 +49,8 @@ export interface ComponentProps {
   showMessageField?: boolean;
 
   // Layout / Flexbox
-  columns?: number; // for Grid (1 to 4)
+  columns?: number; // for Grid (1 to 12)
+  rows?: number; // for Grid (1 to 12)
   gap?: string;
   flexDirection?: 'flex-row' | 'flex-col';
   justifyContent?: 'justify-start' | 'justify-end' | 'justify-center' | 'justify-between' | 'justify-around';

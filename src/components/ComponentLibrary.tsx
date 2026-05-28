@@ -6,7 +6,10 @@ import {
   ListTodo, 
   Grid3X3,
   HelpCircle,
-  Plus
+  Plus,
+  Layers,
+  PanelTop,
+  PanelBottom
 } from 'lucide-react';
 import type { ComponentType } from '../types/canvas';
 
@@ -53,6 +56,24 @@ export default function ComponentLibrary({ onAddComponent, filterText = '' }: Co
       label: 'Layout Grid',
       description: 'Multi-column container to group sub-elements.',
       icon: <Grid3X3 className="w-5 h-5 text-amber-400" />
+    },
+    {
+      type: 'Section',
+      label: 'Page Section',
+      description: 'Full-width container with title and subtitle.',
+      icon: <Layers className="w-5 h-5 text-sky-400" />
+    },
+    {
+      type: 'Navbar',
+      label: 'Navigation Bar',
+      description: 'Top navigation with brand and links.',
+      icon: <PanelTop className="w-5 h-5 text-teal-400" />
+    },
+    {
+      type: 'Footer',
+      label: 'Page Footer',
+      description: 'Bottom section with copyright and links.',
+      icon: <PanelBottom className="w-5 h-5 text-slate-400" />
     }
   ];
 

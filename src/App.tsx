@@ -15,6 +15,8 @@ import PropertyInspector from './components/PropertyInspector';
 import type { CanvasComponent, ComponentType, ComponentProps, BreakpointType, ViewType, PageSettings } from './types/canvas';
 import { generateComponentHtml, generateFullHtml, parseHtmlToComponents, wrapRawHtmlInTemplate } from './utils/codeGenerator';
 
+import ContextMenu from './components/ContextMenu';
+
 // Check if this window is running as a detached visual canvas or live preview tab
 const isCanvasMode = typeof window !== 'undefined' && window.location.search.includes('mode=canvas');
 const isPreviewMode = typeof window !== 'undefined' && window.location.search.includes('mode=preview');
@@ -117,6 +119,7 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         borderRadius: 'rounded-none',
         shadow: 'shadow-none',
         columns: 3,
+        rows: 1,
         gap: 'gap-6',
         top: 500,
         left: 50,
@@ -141,6 +144,59 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         modelScale: 1.5,
         modelAutoRotate: true,
         modelInteractive: true
+      };
+    case 'Section':
+      return {
+        ...common,
+        paddingY: 'py-16',
+        paddingX: 'px-8',
+        bgColor: 'bg-zinc-900',
+        sectionTitle: 'Main Section Title',
+        subtitle: 'Add some descriptive text for this layout section.',
+        borderRadius: 'rounded-none',
+        borderWidth: 'border-0',
+        shadow: 'shadow-none',
+        top: 200,
+        left: 0,
+        width: '100%',
+        height: 'auto'
+      };
+    case 'Navbar':
+      return {
+        ...common,
+        paddingY: 'py-4',
+        paddingX: 'px-6',
+        bgColor: 'bg-zinc-950',
+        logoText: 'BrandLogo',
+        links: ['Home', 'About', 'Services', 'Contact'],
+        buttonText: 'Sign Up',
+        borderRadius: 'rounded-none',
+        borderWidth: 'border-b',
+        borderColor: 'border-zinc-800',
+        shadow: 'shadow-sm',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 'auto'
+      };
+    case 'Footer':
+      return {
+        ...common,
+        paddingY: 'py-12',
+        paddingX: 'px-8',
+        bgColor: 'bg-zinc-950',
+        logoText: 'BrandLogo',
+        description: 'Building amazing experiences on the web.',
+        copyrightText: '© 2026 DevCanvas. All rights reserved.',
+        links: ['Privacy Policy', 'Terms of Service', 'Contact Us'],
+        borderRadius: 'rounded-none',
+        borderWidth: 'border-t',
+        borderColor: 'border-zinc-800',
+        shadow: 'shadow-none',
+        top: 800,
+        left: 0,
+        width: '100%',
+        height: 'auto'
       };
     default:
       return common;
@@ -257,6 +313,28 @@ export default function App() {
   const [isDetached, setIsDetached] = useState<boolean>(false);
   const [isPreviewDetached, setIsPreviewDetached] = useState<boolean>(false);
 
+  // History & Clipboard state
+  const [past, setPast] = useState<CanvasComponent[][]>([]);
+  const [future, setFuture] = useState<CanvasComponent[][]>([]);
+  const [clipboard, setClipboard] = useState<CanvasComponent | null>(null);
+
+  // Context Menu state
+  const [contextMenu, setContextMenu] = useState<{ show: boolean, x: number, y: number }>({ show: false, x: 0, y: 0 });
+
+  const pastRef = useRef<CanvasComponent[][]>([]);
+  const futureRef = useRef<CanvasComponent[][]>([]);
+  const componentsRef = useRef<CanvasComponent[]>([]);
+  const clipboardRef = useRef<CanvasComponent | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    pastRef.current = past;
+    futureRef.current = future;
+    componentsRef.current = components;
+    clipboardRef.current = clipboard;
+    selectedIdRef.current = selectedId;
+  }, [past, future, components, clipboard, selectedId]);
+
   // Global Page settings
   const [pageSettings, setPageSettings] = useState<PageSettings>({
     bgPreset: 'none',
@@ -291,13 +369,144 @@ export default function App() {
     }
   }, [components, isManualCodeEditing]);
 
-  // Sync state selectors
-  const getSelectedComponent = (): CanvasComponent | null => {
-    if (!selectedId) return null;
+  const saveHistory = (currentComponents: CanvasComponent[]) => {
+    setPast(prev => [...prev, currentComponents]);
+    setFuture([]);
+  };
+
+  const handleUndo = () => {
+    if (pastRef.current.length === 0) return;
+    const previous = pastRef.current[pastRef.current.length - 1];
+    setFuture(prev => [componentsRef.current, ...prev]);
+    setPast(prev => prev.slice(0, prev.length - 1));
+    setComponents(previous);
+  };
+
+  const handleRedo = () => {
+    if (futureRef.current.length === 0) return;
+    const next = futureRef.current[0];
+    setPast(prev => [...prev, componentsRef.current]);
+    setFuture(prev => prev.slice(1));
+    setComponents(next);
+  };
+
+  const handleCopy = () => {
+    if (!selectedIdRef.current) return;
+    const comp = getSelectedComponent(selectedIdRef.current, componentsRef.current);
+    if (comp) {
+      setClipboard(comp);
+    }
+  };
+
+  const handlePaste = () => {
+    if (!clipboardRef.current) return;
+    const newComp = JSON.parse(JSON.stringify(clipboardRef.current));
+    newComp.id = `${newComp.type.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`;
     
-    const search = (list: CanvasComponent[]): CanvasComponent | null => {
-      for (const item of list) {
-        if (item.id === selectedId) return item;
+    if (newComp.props.top !== undefined && newComp.props.left !== undefined) {
+      newComp.props.top += 20;
+      newComp.props.left += 20;
+    }
+
+    if (newComp.children) {
+      const resetIds = (children: CanvasComponent[]) => {
+        children.forEach(c => {
+          c.id = `${c.type.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`;
+          if (c.children) resetIds(c.children);
+        });
+      };
+      resetIds(newComp.children);
+    }
+
+    saveHistory(componentsRef.current);
+    setComponents([...componentsRef.current, newComp]);
+    setSelectedId(newComp.id);
+  };
+
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement || 
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key.toLowerCase()) {
+          case 'z':
+            e.preventDefault();
+            handleUndo();
+            break;
+          case 'y':
+            e.preventDefault();
+            handleRedo();
+            break;
+          case 'c':
+            e.preventDefault();
+            handleCopy();
+            break;
+          case 'v':
+            e.preventDefault();
+            handlePaste();
+            break;
+          case 'd':
+            e.preventDefault();
+            if (selectedIdRef.current) duplicateComponent(selectedIdRef.current);
+            break;
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+         if (selectedIdRef.current) deleteComponent(selectedIdRef.current);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Global Context Menu Right Click
+  useEffect(() => {
+    const handleContextMenu = (e: MouseEvent) => {
+      // Don't show context menu on landing page, in preview, or during manual code edit
+      if (view !== 'ide' || isManualCodeEditing || isPreviewMode) return;
+      
+      // Also exclude text inputs/textareas from custom context menu
+      if (
+        e.target instanceof HTMLInputElement || 
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+      setContextMenu({ show: true, x: e.clientX, y: e.clientY });
+    };
+
+    window.addEventListener('contextmenu', handleContextMenu);
+    return () => window.removeEventListener('contextmenu', handleContextMenu);
+  }, [view, isManualCodeEditing]);
+
+  const handleContextMenuAction = (action: 'undo' | 'redo' | 'copy' | 'paste' | 'duplicate' | 'delete') => {
+    switch (action) {
+      case 'undo': handleUndo(); break;
+      case 'redo': handleRedo(); break;
+      case 'copy': handleCopy(); break;
+      case 'paste': handlePaste(); break;
+      case 'duplicate': if (selectedIdRef.current) duplicateComponent(selectedIdRef.current); break;
+      case 'delete': if (selectedIdRef.current) deleteComponent(selectedIdRef.current); break;
+    }
+  };
+
+  // Sync state selectors
+  const getSelectedComponent = (targetId: string | null = selectedId, list: CanvasComponent[] = components): CanvasComponent | null => {
+    if (!targetId) return null;
+    
+    const search = (items: CanvasComponent[]): CanvasComponent | null => {
+      for (const item of items) {
+        if (item.id === targetId) return item;
         if (item.children) {
           const found = search(item.children);
           if (found) return found;
@@ -305,11 +514,12 @@ export default function App() {
       }
       return null;
     };
-    return search(components);
+    return search(list);
   };
 
   // Add Component (Appends to target container or root list)
   const addComponent = (type: ComponentType, parentId?: string) => {
+    saveHistory(componentsRef.current);
     const newComp: CanvasComponent = {
       id: `${type.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
@@ -405,6 +615,7 @@ export default function App() {
 
   // Duplicate target component (deep clones component tree)
   const duplicateComponent = (id: string) => {
+    saveHistory(componentsRef.current);
     const recursiveDuplicate = (list: CanvasComponent[]): CanvasComponent[] => {
       const result: CanvasComponent[] = [];
       for (const item of list) {
@@ -1161,6 +1372,18 @@ export default function App() {
         )}
 
       </div>
+
+      <ContextMenu
+        x={contextMenu.x}
+        y={contextMenu.y}
+        show={contextMenu.show}
+        onClose={() => setContextMenu({ ...contextMenu, show: false })}
+        onAction={handleContextMenuAction}
+        hasSelection={!!selectedId}
+        canUndo={past.length > 0}
+        canRedo={future.length > 0}
+        hasClipboard={!!clipboard}
+      />
     </div>
   );
 }
