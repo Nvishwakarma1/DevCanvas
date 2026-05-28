@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: #09090b; /* bg-zinc-950 */
+    color: #f4f4f5; /* text-zinc-100 */
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Modern clean scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(9, 9, 11, 0.5);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.6);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 161, 170, 0.8);
+}
+
+/* Premium background mesh and grids */
+.grid-bg-dark {
+  background-size: 30px 30px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+}
+
+.grid-bg-light {
+  background-size: 20px 20px;
+  background-image: 
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+}
+
+/* Glassmorphism utility */
+.glass-panel {
+  background: rgba(18, 18, 24, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Glowing blur blobs */
+.glow-blob {
+  filter: blur(130px);
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+
+/* Animation utilities */
+@keyframes float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Code Editor tag highlights styling */
+.editor-tag { color: #f43f5e; }     /* rose-500 */
+.editor-attr { color: #fb923c; }    /* orange-400 */
+.editor-val { color: #34d399; }     /* emerald-400 */
+.editor-text { color: #e4e4e7; }    /* zinc-200 */
+.editor-comm { color: #71717a; }    /* zinc-500 */
