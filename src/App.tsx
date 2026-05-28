@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  Layout, 
   ArrowLeft, 
   Download,
   ExternalLink,
   Layers
 } from 'lucide-react';
+import logoImg from './assets/DClogo.png';
 import LandingPage from './components/LandingPage';
 import ComponentLibrary from './components/ComponentLibrary';
 import VisualCanvas from './components/VisualCanvas';
@@ -730,9 +730,7 @@ export default function App() {
           <div className="h-4 w-px bg-zinc-850" />
           
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded bg-indigo-600 flex items-center justify-center">
-              <Layout className="w-3.5 h-3.5 text-white" />
-            </div>
+            <img src={logoImg} className="w-6 h-6 rounded object-contain shadow shadow-indigo-500/20" alt="DevCanvas Logo" />
             <span className="font-bold text-sm tracking-tight text-white">DevCanvas</span>
           </div>
 

@@ -10,6 +10,7 @@ import {
   Layout, 
   Zap 
 } from 'lucide-react';
+import logoImg from '../assets/DClogo.png';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -56,9 +57,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       <header className="relative z-10 border-b border-zinc-900 bg-zinc-950/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30">
-              <Layout className="w-4 h-4 text-white" />
-            </div>
+            <img src={logoImg} className="w-8 h-8 rounded-lg object-contain shadow-lg shadow-indigo-650/20" alt="DevCanvas Logo" />
             <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
               DevCanvas
             </span>
