@@ -1,4 +1,4 @@
-import { type DragEvent, type MouseEvent } from 'react';
+import { type DragEvent, type MouseEvent, useState, useRef, useEffect } from 'react';
 import { 
   Monitor, 
   Tablet, 
@@ -9,31 +9,55 @@ import {
   ChevronDown,
   LayoutTemplate
 } from 'lucide-react';
-import type { CanvasComponent, BreakpointType, ComponentProps } from '../types/canvas';
+import type { CanvasComponent, BreakpointType, ComponentProps, PageSettings } from '../types/canvas';
+import ThreeDModelViewer from './ThreeDModelViewer';
+import BackgroundEngine from './BackgroundEngine';
 
 interface VisualCanvasProps {
   components: CanvasComponent[];
   selectedId: string | null;
   breakpoint: BreakpointType;
+  pageSettings: PageSettings;
   onSelectComponent: (id: string | null) => void;
   onDeleteComponent: (id: string) => void;
   onDuplicateComponent: (id: string) => void;
   onMoveComponent: (id: string, direction: 'up' | 'down') => void;
   onDropComponent: (type: string, parentId?: string) => void;
   onChangeBreakpoint: (b: BreakpointType) => void;
+  onUpdateComponentProps: (id: string, newProps: Partial<ComponentProps>) => void;
 }
 
 export default function VisualCanvas({
   components,
   selectedId,
   breakpoint,
+  pageSettings,
   onSelectComponent,
   onDeleteComponent,
   onDuplicateComponent,
   onMoveComponent,
   onDropComponent,
   onChangeBreakpoint,
+  onUpdateComponentProps,
 }: VisualCanvasProps) {
+
+  const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
+  const domNodesRef = useRef<{[id: string]: HTMLDivElement | null}>({});
+  const [, forceUpdate] = useState({});
+
+  // Trigger manual handles re-draw when selected node moves
+  useEffect(() => {
+    forceUpdate({});
+  }, [components, selectedId]);
+
+  // Track coordinates for cursor followers
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top
+    });
+  };
 
   // Get frame width classes based on active device breakpoint
   const getBreakpointWidth = () => {
@@ -75,13 +99,199 @@ export default function VisualCanvas({
       p.borderColor,
       p.shadow,
     ].filter(Boolean).join(' ');
-    return `${spacing} ${design}`.trim().replace(/\s+/g, ' ');
+
+    const flex = [
+      p.flexDirection || 'flex-col',
+      p.justifyContent || 'justify-start',
+      p.alignItems || 'items-center',
+      p.gap || 'gap-6'
+    ].filter(Boolean).join(' ');
+
+    const lh = p.lineHeight || '';
+
+    return `${spacing} ${design} ${flex} ${lh}`.trim().replace(/\s+/g, ' ');
+  };
+
+  // Draggable Absolute Position logic
+  const handleMoveStart = (e: MouseEvent, comp: CanvasComponent) => {
+    if (e.button !== 0) return; // Left click only
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('.action-btn') || 
+      target.closest('.resize-handle') || 
+      target.closest('.rotate-stem') ||
+      target.closest('button') ||
+      target.closest('input') ||
+      target.closest('textarea') ||
+      target.closest('select')
+    ) {
+      return;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialTop = comp.props.top !== undefined ? comp.props.top : 120;
+    const initialLeft = comp.props.left !== undefined ? comp.props.left : 100;
+
+    const handleWindowMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+
+      onUpdateComponentProps(comp.id, {
+        top: Math.max(0, initialTop + dy),
+        left: Math.max(0, initialLeft + dx),
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  // Resizing transformations math
+  const handleResizeStart = (e: MouseEvent, direction: string, rect: DOMRect, comp: CanvasComponent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialWidth = rect.width;
+    const initialHeight = rect.height;
+    const initialTop = comp.props.top !== undefined ? comp.props.top : 120;
+    const initialLeft = comp.props.left !== undefined ? comp.props.left : 100;
+
+    const handleWindowMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+
+      let newWidth = initialWidth;
+      let newHeight = initialHeight;
+      let newTop = initialTop;
+      let newLeft = initialLeft;
+
+      if (direction.includes('r')) {
+        newWidth = Math.max(50, initialWidth + dx);
+      }
+      if (direction.includes('l')) {
+        const potentialWidth = initialWidth - dx;
+        if (potentialWidth > 50) {
+          newWidth = potentialWidth;
+          newLeft = initialLeft + dx;
+        }
+      }
+      if (direction.includes('b')) {
+        newHeight = Math.max(30, initialHeight + dy);
+      }
+      if (direction.includes('t')) {
+        const potentialHeight = initialHeight - dy;
+        if (potentialHeight > 30) {
+          newHeight = potentialHeight;
+          newTop = initialTop + dy;
+        }
+      }
+
+      onUpdateComponentProps(comp.id, {
+        width: `${newWidth}px`,
+        height: comp.type === 'ThreeDAsset' || comp.props.height !== 'auto' ? `${newHeight}px` : 'auto',
+        top: Math.max(0, newTop),
+        left: Math.max(0, newLeft),
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  // Rotation Transformations Math
+  const handleRotateStart = (e: MouseEvent, rect: DOMRect, comp: CanvasComponent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    const handleWindowMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const angleRad = Math.atan2(moveEvent.clientY - cy, moveEvent.clientX - cx);
+      const angleDeg = Math.round(angleRad * (180 / Math.PI)) + 90;
+      onUpdateComponentProps(comp.id, {
+        rotation: (angleDeg + 360) % 360,
+      });
+    };
+
+    const handleWindowMouseUp = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  // Render element transformations overlays
+  const renderTransformHandles = (c: CanvasComponent) => {
+    const el = domNodesRef.current[c.id];
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+
+    const handles = [
+      { dir: 'tl', style: { top: -4, left: -4, cursor: 'nwse-resize' } },
+      { dir: 'tc', style: { top: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+      { dir: 'tr', style: { top: -4, right: -4, cursor: 'nesw-resize' } },
+      { dir: 'mr', style: { top: '50%', right: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+      { dir: 'br', style: { bottom: -4, right: -4, cursor: 'nwse-resize' } },
+      { dir: 'bc', style: { bottom: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+      { dir: 'bl', style: { bottom: -4, left: -4, cursor: 'nesw-resize' } },
+      { dir: 'ml', style: { top: '50%', left: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+    ];
+
+    return (
+      <>
+        {/* Selected Border outline */}
+        <div 
+          className="absolute border border-dashed border-indigo-500 pointer-events-none rounded z-35"
+          style={{
+            top: -2,
+            left: -2,
+            width: 'calc(100% + 4px)',
+            height: 'calc(100% + 4px)'
+          }}
+        />
+
+        {/* Rotate stem handle */}
+        <div
+          onMouseDown={(e) => handleRotateStart(e, rect, c)}
+          className="absolute left-1/2 w-0.5 h-6 bg-indigo-500 z-40 -top-6 -translate-x-1/2 cursor-alias rotate-stem flex items-center justify-center"
+          title="Drag to Rotate"
+        >
+          <div className="w-2.5 h-2.5 rounded-full bg-indigo-650 border border-white hover:bg-white transition-colors" />
+        </div>
+
+        {/* Resize handle points */}
+        {handles.map((h) => (
+          <div
+            key={h.dir}
+            onMouseDown={(e) => handleResizeStart(e, h.dir, rect, c)}
+            className="absolute w-2 h-2 bg-indigo-600 border border-white rounded-full z-40 shadow shadow-indigo-950 resize-handle hover:bg-indigo-300 transition-colors"
+            style={h.style as any}
+          />
+        ))}
+      </>
+    );
   };
 
   // Render a component's action toolbar
   const renderActions = (id: string) => {
     return (
-      <div className="absolute -top-3.5 right-2 z-30 flex items-center bg-indigo-600 rounded shadow-md border border-indigo-500 overflow-hidden text-white text-[10px]">
+      <div className="absolute -top-3.5 right-2 z-30 flex items-center bg-indigo-600 rounded shadow-md border border-indigo-500 overflow-hidden text-white text-[10px] action-btn select-none">
         <button
           onClick={(e) => { e.stopPropagation(); onMoveComponent(id, 'up'); }}
           className="p-1 hover:bg-indigo-500 transition-colors border-r border-indigo-500 cursor-pointer"
@@ -115,7 +325,7 @@ export default function VisualCanvas({
   };
 
   // Recursive renderer function
-  const renderComponent = (c: CanvasComponent) => {
+  const renderComponent = (c: CanvasComponent, isNested = false) => {
     const isSelected = selectedId === c.id;
     const p = c.props;
     const classList = getComponentClasses(p);
@@ -125,157 +335,228 @@ export default function VisualCanvas({
       onSelectComponent(c.id);
     };
 
-    const wrapperClasses = `relative group transition-all ${
+    // Absolute or Nested position style binding
+    const layoutStyle: React.CSSProperties = isNested 
+      ? {
+          position: 'relative',
+          width: p.width || '105%',
+          height: p.height || 'auto',
+          transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
+          zIndex: isSelected ? 40 : 10,
+        }
+      : {
+          position: 'absolute',
+          top: p.top !== undefined ? `${p.top}px` : '120px',
+          left: p.left !== undefined ? `${p.left}px` : '100px',
+          width: p.width || '320px',
+          height: p.height || 'auto',
+          transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
+          zIndex: isSelected ? 40 : 10,
+        };
+
+    const wrapperClasses = `group transition-shadow ${
       isSelected 
-        ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-zinc-950 rounded' 
-        : 'hover:outline hover:outline-2 hover:outline-dashed hover:outline-zinc-650 hover:outline-offset-1 rounded'
+        ? 'ring-1 ring-indigo-500 rounded shadow-2xl shadow-indigo-500/10' 
+        : 'hover:outline hover:outline-1 hover:outline-dashed hover:outline-zinc-700 hover:outline-offset-1 rounded'
     }`;
 
     // Switch case to render component types visually
-    switch (c.type) {
-      case 'Header': {
-        const links = p.links || ['Home', 'Features', 'Pricing', 'Contact'];
-        return (
-          <div key={c.id} onClick={handleClick} className={wrapperClasses}>
-            {isSelected && renderActions(c.id)}
-            <header className={`${classList} flex items-center justify-between w-full select-none cursor-pointer`}>
-              <div className="font-bold text-xl tracking-tight">{p.logoText || 'DevCanvas'}</div>
-              <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+    const renderNode = () => {
+      switch (c.type) {
+        case 'Header': {
+          const links = p.links || ['Home', 'Features', 'Pricing', 'Contact'];
+          return (
+            <header className={`${classList} flex items-center justify-between w-full h-full select-none cursor-grab active:cursor-grabbing`}>
+              <div className="font-bold text-lg tracking-tight">{p.logoText || 'DevCanvas'}</div>
+              <nav className="hidden md:flex items-center gap-4 text-xs font-semibold">
                 {links.map((link, idx) => (
                   <span key={idx} className="hover:text-indigo-400 transition-colors">{link}</span>
                 ))}
               </nav>
-              <button className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-all">
+              <button className="px-3 py-1.5 text-xs font-semibold rounded bg-indigo-650 text-white hover:bg-indigo-700 transition-all pointer-events-none">
                 {p.buttonText || 'Get Started'}
               </button>
             </header>
-          </div>
-        );
-      }
+          );
+        }
 
-      case 'Card': {
-        return (
-          <div key={c.id} onClick={handleClick} className={wrapperClasses}>
-            {isSelected && renderActions(c.id)}
-            <div className={`${classList} max-w-sm flex flex-col h-full select-none cursor-pointer overflow-hidden`}>
-              <div className="flex flex-col">
-                {p.imageUrl && (
-                  <img className="w-full h-40 object-cover rounded-lg mb-3 pointer-events-none" src={p.imageUrl} alt="Card image" />
-                )}
-                {p.badgeText && (
-                  <span className="self-start inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-500/10 text-indigo-400 mb-2">
-                    {p.badgeText}
-                  </span>
-                )}
-                <h3 className="text-lg font-bold mb-1.5">{p.title || 'Amazing Card'}</h3>
-                <p className="text-zinc-400 text-xs mb-3 leading-relaxed">
-                  {p.description || 'Provide detailed descriptions of your feature or product here.'}
-                </p>
-              </div>
+        case 'Card': {
+          return (
+            <div className={`${classList} flex flex-col h-full select-none cursor-grab active:cursor-grabbing overflow-hidden`}>
+              {p.imageUrl && (
+                <img className="w-full h-32 object-cover rounded-lg mb-2.5 pointer-events-none" src={p.imageUrl} alt="Card image" />
+              )}
+              {p.badgeText && (
+                <span className="self-start inline-block px-2 py-0.5 rounded text-[9px] font-semibold bg-indigo-500/15 text-indigo-400 mb-1.5">
+                  {p.badgeText}
+                </span>
+              )}
+              <h3 className="text-sm font-bold mb-1">{p.title || 'Amazing Card'}</h3>
+              <p className="text-zinc-400 text-[10px] mb-2.5 leading-relaxed">
+                {p.description || 'Provide detailed descriptions of your feature or product here.'}
+              </p>
               {p.buttonText && (
-                <button className="w-full py-1.5 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white mt-auto">
+                <button className="w-full py-1 text-[10px] font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white mt-auto pointer-events-none">
                   {p.buttonText}
                 </button>
               )}
             </div>
-          </div>
-        );
-      }
-
-      case 'Button': {
-        let variantClasses = '';
-        if (p.buttonVariant === 'outline') {
-          variantClasses = 'border border-zinc-700 hover:bg-zinc-800 text-zinc-300';
-        } else if (p.buttonVariant === 'ghost') {
-          variantClasses = 'hover:bg-zinc-800 text-zinc-400 hover:text-white';
-        } else {
-          variantClasses = 'bg-indigo-600 hover:bg-indigo-700 text-white';
+          );
         }
-        const isCustomBg = p.bgColor && p.bgColor !== 'bg-transparent';
-        const bgStyle = isCustomBg ? p.bgColor : variantClasses;
 
-        return (
-          <div key={c.id} onClick={handleClick} className={`${wrapperClasses} inline-block`}>
-            {isSelected && renderActions(c.id)}
-            <button className={`px-5 py-2 text-xs font-semibold rounded cursor-pointer ${classList} ${isCustomBg ? '' : bgStyle}`}>
+        case 'Button': {
+          let variantClasses = '';
+          if (p.buttonVariant === 'outline') {
+            variantClasses = 'border border-zinc-700 hover:bg-zinc-800 text-zinc-300';
+          } else if (p.buttonVariant === 'ghost') {
+            variantClasses = 'hover:bg-zinc-800 text-zinc-400 hover:text-white';
+          } else {
+            variantClasses = 'bg-indigo-600 hover:bg-indigo-700 text-white';
+          }
+          const isCustomBg = p.bgColor && p.bgColor !== 'bg-transparent';
+          const bgStyle = isCustomBg ? p.bgColor : variantClasses;
+
+          return (
+            <button className={`px-4 py-2.5 text-xs font-semibold rounded cursor-grab active:cursor-grabbing w-full h-full ${classList} ${isCustomBg ? '' : bgStyle}`}>
               {p.buttonText || 'Button Click'}
             </button>
-          </div>
-        );
-      }
+          );
+        }
 
-      case 'InputForm': {
-        return (
-          <div key={c.id} onClick={handleClick} className={wrapperClasses}>
-            {isSelected && renderActions(c.id)}
-            <form className={`${classList} w-full max-w-md flex flex-col gap-3 select-none cursor-pointer`} onSubmit={(e) => e.preventDefault()}>
-              <h3 className="text-base font-bold border-b border-zinc-800 pb-1.5 mb-1">{p.formTitle || 'Subscribe Now'}</h3>
+        case 'InputForm': {
+          return (
+            <form className={`${classList} w-full h-full flex flex-col gap-2 select-none cursor-grab active:cursor-grabbing`} onSubmit={(e) => e.preventDefault()}>
+              <h3 className="text-sm font-bold border-b border-zinc-800 pb-1 mb-1">{p.formTitle || 'Subscribe Now'}</h3>
               
               {p.showNameField && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Full Name</label>
-                  <input type="text" placeholder="John Doe" disabled className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-pointer" />
+                  <label className="block text-[8px] font-semibold text-zinc-500 uppercase mb-0.5">Full Name</label>
+                  <input type="text" placeholder="John Doe" disabled className="w-full px-2.5 py-1 text-[10px] rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-grab" />
                 </div>
               )}
 
               {p.showEmailField && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Email Address</label>
-                  <input type="email" placeholder="john@example.com" disabled className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-pointer" />
+                  <label className="block text-[8px] font-semibold text-zinc-500 uppercase mb-0.5">Email Address</label>
+                  <input type="email" placeholder="john@example.com" disabled className="w-full px-2.5 py-1 text-[10px] rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-grab" />
                 </div>
               )}
 
               {p.showMessageField && (
                 <div>
-                  <label className="block text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Message</label>
-                  <textarea rows={2} placeholder="Tell us more..." disabled className="w-full px-2.5 py-1.5 text-xs rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-pointer resize-none"></textarea>
+                  <label className="block text-[8px] font-semibold text-zinc-500 uppercase mb-0.5">Message</label>
+                  <textarea rows={2} placeholder="Tell us more..." disabled className="w-full px-2.5 py-1 text-[10px] rounded border border-zinc-800 bg-zinc-900/50 text-white outline-none cursor-grab resize-none"></textarea>
                 </div>
               )}
 
-              <button className="w-full py-2 text-xs font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white transition-all mt-1">
+              <button className="w-full py-1.5 text-[10px] font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white mt-1 pointer-events-none">
                 {p.buttonText || 'Submit Form'}
               </button>
             </form>
-          </div>
-        );
-      }
+          );
+        }
 
-      case 'Grid': {
-        const columns = p.columns || 3;
-        const colClass = `grid-cols-1 md:grid-cols-${columns}`;
-        const gapClass = p.gap || 'gap-6';
+        case 'Grid': {
+          const columns = p.columns || 3;
+          const colClass = `grid-cols-1 md:grid-cols-${columns}`;
+          const gapClass = p.gap || 'gap-6';
 
-        return (
-          <div
-            key={c.id}
-            onClick={handleClick}
-            onDragOver={handleCanvasDragOver}
-            onDrop={(e) => handleCanvasDrop(e, c.id)}
-            className={`${wrapperClasses} p-2 border border-dashed border-zinc-800/80 rounded-lg`}
-          >
-            {isSelected && renderActions(c.id)}
-            <div className="flex items-center justify-between text-[9px] text-zinc-500 font-mono mb-2 uppercase select-none">
-              <span>Grid Layout ({columns} Columns)</span>
-              <span>Drop Zone</span>
+          return (
+            <div
+              onDragOver={handleCanvasDragOver}
+              onDrop={(e) => handleCanvasDrop(e, c.id)}
+              className="p-2 border border-dashed border-zinc-800/80 rounded-lg w-full h-full cursor-grab active:cursor-grabbing"
+            >
+              <div className="flex items-center justify-between text-[8px] text-zinc-550 font-mono mb-1.5 uppercase select-none pointer-events-none">
+                <span>Grid Layout ({columns} Columns)</span>
+                <span>Drop Zone</span>
+              </div>
+              
+              <div className={`grid ${colClass} ${gapClass} ${classList} w-full h-full min-h-[80px]`}>
+                {(c.children || []).length > 0 ? (
+                  c.children!.map((child) => renderComponent(child, true))
+                ) : (
+                  <div className="col-span-full border border-dashed border-zinc-800 rounded bg-zinc-950/20 p-4 flex flex-col items-center justify-center text-center select-none pointer-events-none h-full min-h-[80px]">
+                    <span className="text-[9px] text-zinc-500">Grid Empty</span>
+                    <p className="text-[8px] text-zinc-650 mt-0.5">Drag items here</p>
+                  </div>
+                )}
+              </div>
             </div>
-            
-            <div className={`grid ${colClass} ${gapClass} ${classList} w-full min-h-[100px]`}>
-              {(c.children || []).length > 0 ? (
-                c.children!.map((child) => renderComponent(child))
-              ) : (
-                <div className="col-span-full border border-dashed border-zinc-800 rounded bg-zinc-950/20 p-6 flex flex-col items-center justify-center text-center select-none">
-                  <span className="text-[10px] text-zinc-500">Grid Empty</span>
-                  <p className="text-[9px] text-zinc-600 mt-0.5">Drag & drop items directly here</p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      }
+          );
+        }
 
-      default:
-        return null;
+        case 'ThreeDAsset': {
+          return (
+            <div className="w-full h-full cursor-grab active:cursor-grabbing bg-zinc-950/20 rounded-xl overflow-hidden">
+              <ThreeDModelViewer
+                modelUrl={p.modelUrl || ''}
+                autoRotate={!!p.modelAutoRotate}
+                scale={p.modelScale || 1.5}
+                interactive={!!p.modelInteractive}
+              />
+            </div>
+          );
+        }
+
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <div 
+        key={c.id} 
+        ref={el => { domNodesRef.current[c.id] = el; }}
+        style={layoutStyle}
+        onClick={handleClick} 
+        onMouseDown={(e) => !isNested && handleMoveStart(e, c)}
+        className={wrapperClasses}
+      >
+        {isSelected && renderActions(c.id)}
+        {renderNode()}
+        {isSelected && renderTransformHandles(c)}
+      </div>
+    );
+  };
+
+  const canvasCursorClass = (pageSettings.cursorPreset === 'neon-crosshair' || pageSettings.cursorPreset === 'glowing-circle')
+    ? 'cursor-none'
+    : '';
+
+  const customCursorStyle = pageSettings.cursorPreset === 'custom' && pageSettings.customCursorUrl
+    ? { cursor: `url(${pageSettings.customCursorUrl}) 16 16, auto` }
+    : {};
+
+  // Custom Neon Follower cursor overlays
+  const renderCursorFollower = () => {
+    if (pageSettings.cursorPreset === 'default' || pageSettings.cursorPreset === 'custom') return null;
+
+    if (pageSettings.cursorPreset === 'glowing-circle') {
+      return (
+        <div
+          className="absolute pointer-events-none z-[999] w-6 h-6 rounded-full border border-indigo-500 bg-indigo-500/20 blur-[0.5px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
+          style={{ left: mousePos.x + 'px', top: mousePos.y + 'px' }}
+        />
+      );
     }
+
+    if (pageSettings.cursorPreset === 'neon-crosshair') {
+      return (
+        <div
+          className="absolute pointer-events-none z-[999] -translate-x-1/2 -translate-y-1/2 text-emerald-450"
+          style={{ left: mousePos.x + 'px', top: mousePos.y + 'px' }}
+        >
+          <svg className="w-5 h-5 animate-spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="8" strokeDasharray="4 2" />
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+            <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+          </svg>
+        </div>
+      );
+    }
+
+    return null;
   };
 
   return (
@@ -313,8 +594,16 @@ export default function VisualCanvas({
       {/* Main Canvas Scroll Area */}
       <div 
         onClick={() => onSelectComponent(null)}
-        className="flex-1 overflow-y-auto p-8 grid-bg-dark flex justify-center items-start min-h-0"
+        onMouseMove={handleMouseMove}
+        style={customCursorStyle}
+        className={`flex-1 overflow-y-auto p-8 relative flex justify-center items-start min-h-0 ${canvasCursorClass}`}
       >
+        {/* Interactive Background Engine */}
+        <BackgroundEngine preset={pageSettings.bgPreset} />
+
+        {/* Cursor follower overlay */}
+        {renderCursorFollower()}
+
         {/* Breakpoint Frame Wrapper */}
         <div className={`transition-all duration-300 ${getBreakpointWidth()} h-full`}>
           {breakpoint === 'desktop' ? (
@@ -322,16 +611,16 @@ export default function VisualCanvas({
             <div
               onDragOver={handleCanvasDragOver}
               onDrop={(e) => handleCanvasDrop(e)}
-              className="w-full min-h-full flex flex-col gap-6"
+              className="w-full min-h-full relative overflow-y-auto min-h-[600px] border border-zinc-900/30 rounded-xl"
             >
               {components.length > 0 ? (
                 components.map((comp) => renderComponent(comp))
               ) : (
                 /* Root Canvas Empty State */
-                <div className="flex-1 min-h-[350px] border border-dashed border-zinc-800 bg-zinc-900/10 rounded-xl flex flex-col items-center justify-center p-12 text-center my-auto">
-                  <LayoutTemplate className="w-12 h-12 text-zinc-700 mb-4 animate-float" />
-                  <h3 className="text-sm font-semibold text-zinc-400">Your Canvas is Empty</h3>
-                  <p className="text-xs text-zinc-500 mt-1 max-w-[280px] leading-relaxed">
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center pointer-events-none select-none">
+                  <LayoutTemplate className="w-12 h-12 text-zinc-800 mb-4 animate-float" />
+                  <h3 className="text-sm font-semibold text-zinc-500">Your Canvas is Empty</h3>
+                  <p className="text-xs text-zinc-650 mt-1 max-w-[280px] leading-relaxed">
                     Click items in the Component Library or drag them directly here to start building your visual UI template.
                   </p>
                 </div>
@@ -352,15 +641,15 @@ export default function VisualCanvas({
                 <div 
                   onDragOver={handleCanvasDragOver}
                   onDrop={(e) => handleCanvasDrop(e)}
-                  className="flex-1 overflow-y-auto px-4 py-8 flex flex-col gap-6 bg-stone-950 mt-1.5"
+                  className="flex-1 relative overflow-y-auto px-4 py-8 bg-stone-950 mt-1.5 min-h-[450px]"
                 >
                   {components.length > 0 ? (
                     components.map((comp) => renderComponent(comp))
                   ) : (
-                    <div className="flex-1 border border-dashed border-zinc-900 rounded-xl flex flex-col items-center justify-center p-8 text-center bg-zinc-900/10">
-                      <LayoutTemplate className="w-10 h-10 text-zinc-700 mb-3" />
-                      <h3 className="text-xs font-semibold text-zinc-400">Empty Device Frame</h3>
-                      <p className="text-[10px] text-zinc-500 mt-1 max-w-[200px] leading-relaxed">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-900/10 pointer-events-none">
+                      <LayoutTemplate className="w-10 h-10 text-zinc-800 mb-3" />
+                      <h3 className="text-xs font-semibold text-zinc-500">Empty Device Frame</h3>
+                      <p className="text-[10px] text-zinc-650 mt-1 max-w-[200px] leading-relaxed">
                         Drag components from the library and drop inside the device workspace.
                       </p>
                     </div>

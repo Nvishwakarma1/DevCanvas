@@ -12,8 +12,8 @@ import VisualCanvas from './components/VisualCanvas';
 import CodeEditor from './components/CodeEditor';
 import LivePreview from './components/LivePreview';
 import PropertyInspector from './components/PropertyInspector';
-import type { CanvasComponent, ComponentType, ComponentProps, BreakpointType, ViewType } from './types/canvas';
-import { generateComponentHtml, generateFullHtml } from './utils/codeGenerator';
+import type { CanvasComponent, ComponentType, ComponentProps, BreakpointType, ViewType, PageSettings } from './types/canvas';
+import { generateComponentHtml, generateFullHtml, parseHtmlToComponents, wrapRawHtmlInTemplate } from './utils/codeGenerator';
 
 // Check if this window is running as a detached visual canvas or live preview tab
 const isCanvasMode = typeof window !== 'undefined' && window.location.search.includes('mode=canvas');
@@ -34,7 +34,13 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
     borderRadius: 'rounded-xl',
     shadow: 'shadow-md',
     borderWidth: 'border',
-    borderColor: 'border-zinc-800'
+    borderColor: 'border-zinc-800',
+    position: 'absolute' as const,
+    top: 120,
+    left: 100,
+    width: '320px',
+    height: 'auto',
+    rotation: 0
   };
 
   switch (type) {
@@ -49,7 +55,11 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         buttonText: 'Get Started',
         borderRadius: 'rounded-none',
         borderWidth: 'border-0',
-        shadow: 'shadow-lg'
+        shadow: 'shadow-lg',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: 'auto'
       };
     case 'Card':
       return {
@@ -61,7 +71,11 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         badgeText: 'New Release',
         buttonText: 'Action Label',
         imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=60',
-        borderRadius: 'rounded-xl'
+        borderRadius: 'rounded-xl',
+        top: 100,
+        left: 50,
+        width: '320px',
+        height: 'auto'
       };
     case 'Button':
       return {
@@ -73,7 +87,11 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         textAlign: 'text-center',
         bgColor: 'bg-indigo-600',
         borderRadius: 'rounded-md',
-        borderWidth: 'border-0'
+        borderWidth: 'border-0',
+        top: 240,
+        left: 450,
+        width: '160px',
+        height: 'auto'
       };
     case 'InputForm':
       return {
@@ -83,7 +101,11 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         showNameField: true,
         showEmailField: true,
         showMessageField: false,
-        borderRadius: 'rounded-2xl'
+        borderRadius: 'rounded-2xl',
+        top: 300,
+        left: 50,
+        width: '380px',
+        height: 'auto'
       };
     case 'Grid':
       return {
@@ -95,7 +117,30 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         borderRadius: 'rounded-none',
         shadow: 'shadow-none',
         columns: 3,
-        gap: 'gap-6'
+        gap: 'gap-6',
+        top: 500,
+        left: 50,
+        width: '100%',
+        height: 'auto'
+      };
+    case 'ThreeDAsset':
+      return {
+        ...common,
+        paddingY: 'py-0',
+        paddingX: 'px-0',
+        bgColor: 'bg-zinc-900',
+        borderRadius: 'rounded-xl',
+        borderWidth: 'border',
+        borderColor: 'border-zinc-800',
+        top: 100,
+        left: 400,
+        width: '350px',
+        height: '350px',
+        rotation: 0,
+        modelUrl: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Embedded/Duck.gltf',
+        modelScale: 1.5,
+        modelAutoRotate: true,
+        modelInteractive: true
       };
     default:
       return common;
@@ -114,9 +159,20 @@ const loadPresetTemplate = (name: string): CanvasComponent[] => {
         props: createDefaultProps('Header')
       },
       {
+        id: `threed-${rootId()}`,
+        type: 'ThreeDAsset',
+        props: {
+          ...createDefaultProps('ThreeDAsset'),
+          top: 100,
+          left: 850,
+          width: '320px',
+          height: '350px'
+        }
+      },
+      {
         id: `grid-${rootId()}`,
         type: 'Grid',
-        props: { ...createDefaultProps('Grid'), columns: 3 },
+        props: { ...createDefaultProps('Grid'), columns: 3, top: 480, left: 20, width: '1150px' },
         children: [
           {
             id: `card-${rootId()}`,
@@ -160,7 +216,9 @@ const loadPresetTemplate = (name: string): CanvasComponent[] => {
           showNameField: true,
           showEmailField: true,
           showMessageField: true,
-          marginX: 'mx-auto'
+          top: 100,
+          left: 20,
+          width: '380px'
         }
       }
     ];
@@ -199,6 +257,13 @@ export default function App() {
   const [isDetached, setIsDetached] = useState<boolean>(false);
   const [isPreviewDetached, setIsPreviewDetached] = useState<boolean>(false);
 
+  // Global Page settings
+  const [pageSettings, setPageSettings] = useState<PageSettings>({
+    bgPreset: 'none',
+    cursorPreset: 'default',
+    customCursorUrl: ''
+  });
+
   // Layout Toggles
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
   const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
@@ -209,10 +274,22 @@ export default function App() {
   const [isConsoleOpen, setIsConsoleOpen] = useState<boolean>(false);
   const [consoleLogs, setConsoleLogs] = useState<string[]>([]);
 
+  // Manual code editing states
+  const [isManualCodeEditing, setIsManualCodeEditing] = useState<boolean>(false);
+  const [manualCode, setManualCode] = useState<string>('');
+
   // Load default landing/portfolio page components once loaded
   useEffect(() => {
     setComponents(loadPresetTemplate('portfolio'));
   }, []);
+
+  // Update manual code from components structure when not in manual edit mode
+  useEffect(() => {
+    if (!isManualCodeEditing) {
+      const currentGenerated = components.map(c => generateComponentHtml(c, 0)).join('\n\n');
+      setManualCode(currentGenerated);
+    }
+  }, [components, isManualCodeEditing]);
 
   // Sync state selectors
   const getSelectedComponent = (): CanvasComponent | null => {
@@ -270,6 +347,11 @@ export default function App() {
 
   // Update properties on styling inspector changes
   const updateComponentProps = (id: string, newProps: Partial<ComponentProps>) => {
+    if (isCanvasMode) {
+      const channel = new BroadcastChannel('devcanvas-sync');
+      channel.postMessage({ type: 'ACTION', payload: { action: 'UPDATE_PROPS', arg: { id, newProps } } });
+      channel.close();
+    }
     const recursiveUpdate = (list: CanvasComponent[]): CanvasComponent[] => {
       return list.map((item) => {
         if (item.id === id) {
@@ -288,6 +370,16 @@ export default function App() {
       });
     };
     setComponents(recursiveUpdate(components));
+  };
+
+  // Update Page Settings and broadcast to other tabs
+  const updatePageSettings = (newSettings: Partial<PageSettings>) => {
+    if (isCanvasMode) {
+      const channel = new BroadcastChannel('devcanvas-sync');
+      channel.postMessage({ type: 'ACTION', payload: { action: 'PAGE_SETTINGS', arg: newSettings } });
+      channel.close();
+    }
+    setPageSettings(prev => ({ ...prev, ...newSettings }));
   };
 
   // Delete component and reset selection if target is deleted
@@ -385,12 +477,38 @@ export default function App() {
 
   // Generate HTML for editor, full HTML for Iframe sandbox
   const generatedCode = components.map(c => generateComponentHtml(c, 0)).join('\n\n');
-  const sandboxHtml = generateFullHtml(components);
+  const sandboxHtml = isManualCodeEditing
+    ? wrapRawHtmlInTemplate(manualCode, pageSettings)
+    : generateFullHtml(components, pageSettings);
 
   // Keep state reference up-to-date for BroadcastChannel single-event listeners
-  const stateRef = useRef({ components, selectedId, breakpoint, sandboxHtml, addComponent, deleteComponent, duplicateComponent, moveComponent });
+  const stateRef = useRef({ 
+    components, 
+    selectedId, 
+    breakpoint, 
+    pageSettings, 
+    sandboxHtml, 
+    addComponent, 
+    deleteComponent, 
+    duplicateComponent, 
+    moveComponent, 
+    updateComponentProps, 
+    updatePageSettings 
+  });
   useEffect(() => {
-    stateRef.current = { components, selectedId, breakpoint, sandboxHtml, addComponent, deleteComponent, duplicateComponent, moveComponent };
+    stateRef.current = { 
+      components, 
+      selectedId, 
+      breakpoint, 
+      pageSettings, 
+      sandboxHtml, 
+      addComponent, 
+      deleteComponent, 
+      duplicateComponent, 
+      moveComponent, 
+      updateComponentProps, 
+      updatePageSettings 
+    };
   });
 
   // Cross-tab Synchronization using BroadcastChannel
@@ -408,6 +526,9 @@ export default function App() {
           setComponents(payload.components);
           setSelectedId(payload.selectedId);
           setBreakpoint(payload.breakpoint);
+          if (payload.pageSettings) {
+            setPageSettings(payload.pageSettings);
+          }
         } else if (type === 'CLOSE_DETACHED') {
           window.close();
         }
@@ -459,7 +580,8 @@ export default function App() {
             payload: { 
               components: stateRef.current.components,
               selectedId: stateRef.current.selectedId,
-              breakpoint: stateRef.current.breakpoint
+              breakpoint: stateRef.current.breakpoint,
+              pageSettings: stateRef.current.pageSettings
             }
           });
           setIsDetached(true);
@@ -491,6 +613,10 @@ export default function App() {
             stateRef.current.addComponent(arg.type, arg.parentId);
           } else if (action === 'BREAKPOINT') {
             setBreakpoint(arg);
+          } else if (action === 'UPDATE_PROPS') {
+            stateRef.current.updateComponentProps(arg.id, arg.newProps);
+          } else if (action === 'PAGE_SETTINGS') {
+            stateRef.current.updatePageSettings(arg);
           }
         }
       };
@@ -505,7 +631,7 @@ export default function App() {
       const channel = new BroadcastChannel('devcanvas-sync');
       channel.postMessage({
         type: 'SYNC_STATE',
-        payload: { components, selectedId, breakpoint }
+        payload: { components, selectedId, breakpoint, pageSettings }
       });
       channel.postMessage({
         type: 'SYNC_PREVIEW_HTML',
@@ -513,7 +639,7 @@ export default function App() {
       });
       channel.close();
     }
-  }, [components, selectedId, breakpoint, sandboxHtml]);
+  }, [components, selectedId, breakpoint, pageSettings, sandboxHtml]);
 
   // Action Dispatcher for Canvas (handles both normal and detached windows)
   const handleCanvasSelect = (id: string | null) => {
@@ -638,6 +764,46 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  // Sync edited manual HTML code back to canvas components data tree
+  const handleSyncToCanvas = () => {
+    try {
+      const parsed = parseHtmlToComponents(manualCode);
+      if (parsed && parsed.length > 0) {
+        setComponents(parsed);
+        setIsManualCodeEditing(false);
+        setConsoleLogs(prev => [
+          ...prev,
+          `[success] Synchronized manual HTML code edits to canvas components successfully! Parsed ${parsed.length} layout components.`
+        ]);
+        setIsConsoleOpen(true);
+      } else {
+        setConsoleLogs(prev => [
+          ...prev,
+          `[warning] Sync Warning: No valid DevCanvas components parsed from the HTML code.`
+        ]);
+        setIsConsoleOpen(true);
+      }
+    } catch (error: any) {
+      console.error("HTML Parse Error: ", error);
+      setConsoleLogs(prev => [
+        ...prev,
+        `[error] Sync Failed: HTML code parsing failed. Check for syntax errors. Details: ${error.message || error}`
+      ]);
+      setIsConsoleOpen(true);
+    }
+  };
+
+  // Discard manual edits and reset to visual canvas components state
+  const handleDiscardChanges = () => {
+    const freshGenerated = components.map(c => generateComponentHtml(c, 0)).join('\n\n');
+    setManualCode(freshGenerated);
+    setIsManualCodeEditing(false);
+    setConsoleLogs(prev => [
+      ...prev,
+      `[info] Discarded manual HTML code changes. Reset code view to current visual canvas state.`
+    ]);
+  };
+
   // Template select trigger
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const tName = e.target.value;
@@ -701,6 +867,8 @@ export default function App() {
           onMoveComponent={handleCanvasMove}
           onDropComponent={handleCanvasDrop}
           onChangeBreakpoint={handleCanvasBreakpoint}
+          pageSettings={pageSettings}
+          onUpdateComponentProps={updateComponentProps}
         />
       </div>
     );
@@ -906,6 +1074,8 @@ export default function App() {
                 onMoveComponent={handleCanvasMove}
                 onDropComponent={handleCanvasDrop}
                 onChangeBreakpoint={handleCanvasBreakpoint}
+                pageSettings={pageSettings}
+                onUpdateComponentProps={updateComponentProps}
               />
             )}
           </div>
@@ -940,7 +1110,16 @@ export default function App() {
         {/* Right Split Panel (collapsible) */}
         {isCodePaneOpen && (
           <div className="w-[420px] xl:w-[480px] border-l border-zinc-850 flex flex-col h-full min-h-0 flex-shrink-0 z-10 shadow-md">
-            <CodeEditor code={generatedCode} onExport={handleExportCode} />
+            <CodeEditor
+              code={isManualCodeEditing ? manualCode : generatedCode}
+              canvasCode={generatedCode}
+              isManualMode={isManualCodeEditing}
+              onChangeCode={setManualCode}
+              onToggleManualMode={setIsManualCodeEditing}
+              onSyncToCanvas={handleSyncToCanvas}
+              onDiscardChanges={handleDiscardChanges}
+              onExport={handleExportCode}
+            />
             {isPreviewDetached ? (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-zinc-950 border-t border-zinc-850 select-none">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 animate-pulse">
@@ -976,6 +1155,8 @@ export default function App() {
           <PropertyInspector
             selectedComponent={getSelectedComponent()}
             onUpdateProps={updateComponentProps}
+            pageSettings={pageSettings}
+            onUpdatePageSettings={updatePageSettings}
           />
         )}
 

@@ -9,24 +9,92 @@ import {
   AlignRight, 
   Grid
 } from 'lucide-react';
-import type { CanvasComponent, ComponentProps } from '../types/canvas';
+import type { CanvasComponent, ComponentProps, PageSettings } from '../types/canvas';
 
 interface PropertyInspectorProps {
   selectedComponent: CanvasComponent | null;
   onUpdateProps: (id: string, newProps: Partial<ComponentProps>) => void;
+  pageSettings: PageSettings;
+  onUpdatePageSettings: (newSettings: Partial<PageSettings>) => void;
 }
 
-export default function PropertyInspector({ selectedComponent, onUpdateProps }: PropertyInspectorProps) {
+export default function PropertyInspector({ 
+  selectedComponent, 
+  onUpdateProps,
+  pageSettings,
+  onUpdatePageSettings
+}: PropertyInspectorProps) {
   const [activeTab, setActiveTab] = useState<'content' | 'style' | 'layout'>('content');
 
   if (!selectedComponent) {
     return (
-      <aside className="w-80 bg-zinc-900 border-l border-zinc-800 flex flex-col items-center justify-center p-6 text-center select-none flex-shrink-0">
-        <Sliders className="w-12 h-12 text-zinc-700 mb-4 animate-float" />
-        <h3 className="text-sm font-semibold text-zinc-400">No Component Selected</h3>
-        <p className="text-xs text-zinc-500 mt-1 max-w-[200px] leading-relaxed">
-          Click any component on the visual canvas to edit its properties, spacing, and styles.
-        </p>
+      <aside className="w-80 bg-zinc-900 border-l border-zinc-800 flex flex-col h-full flex-shrink-0 select-none">
+        <div className="p-4 border-b border-zinc-800 flex flex-col">
+          <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Global Settings</span>
+          <span className="text-sm font-bold text-white flex items-center gap-1.5 mt-0.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Canvas Page Settings
+          </span>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Background Engine */}
+          <div className="space-y-2.5">
+            <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Palette className="w-3.5 h-3.5 text-indigo-400" /> Background Engine
+            </label>
+            <select
+              value={pageSettings.bgPreset}
+              onChange={(e) => onUpdatePageSettings({ bgPreset: e.target.value as any })}
+              className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="none">Solid Stone Dark (Default)</option>
+              <option value="particles">Three.js Particle Swarm</option>
+              <option value="animated-gradient">Neon Fluid Gradient</option>
+              <option value="mouse-trail">Mouse Orbiting Trail</option>
+            </select>
+            <p className="text-[10px] text-zinc-500 leading-relaxed mt-1">
+              Select an interactive background renderer to run behind your layout components on the canvas and in exported code.
+            </p>
+          </div>
+
+          {/* Custom Cursors */}
+          <div className="space-y-3 border-t border-zinc-800 pt-4">
+            <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-emerald-400" /> Interactive Cursor
+            </label>
+            <select
+              value={pageSettings.cursorPreset}
+              onChange={(e) => onUpdatePageSettings({ cursorPreset: e.target.value as any })}
+              className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+            >
+              <option value="default">System Default Pointer</option>
+              <option value="neon-crosshair">Neon Target Crosshair</option>
+              <option value="glowing-circle">Glowing Circle Follower</option>
+              <option value="custom">Custom Image Asset Url</option>
+            </select>
+
+            {pageSettings.cursorPreset === 'custom' && (
+              <div className="space-y-1.5 mt-2">
+                <label className="text-[9px] text-zinc-400 font-semibold uppercase">Cursor URL</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/cursor.png"
+                  value={pageSettings.customCursorUrl}
+                  onChange={(e) => onUpdatePageSettings({ customCursorUrl: e.target.value })}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+            )}
+            <p className="text-[10px] text-zinc-500 leading-relaxed">
+              Define custom cursor states or interactive cursor followers that overlay the live page output.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 bg-zinc-950/40 border-t border-zinc-850 text-center text-[10px] text-zinc-550 font-mono">
+          Click any canvas element to edit
+        </div>
       </aside>
     );
   }
@@ -297,6 +365,62 @@ export default function PropertyInspector({ selectedComponent, onUpdateProps }: 
               </>
             )}
 
+            {/* 3D Asset Content Fields */}
+            {type === 'ThreeDAsset' && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">GLTF/GLB Model URL</label>
+                  <input
+                    type="text"
+                    value={props.modelUrl || ''}
+                    onChange={(e) => updateProp('modelUrl', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                    placeholder="https://raw.githubusercontent.com/..."
+                  />
+                </div>
+
+                <div className="space-y-1 mt-3">
+                  <div className="flex justify-between text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                    <span>Model Scale</span>
+                    <span className="font-mono text-indigo-405">{props.modelScale || 1.0}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.1"
+                    max="5.0"
+                    step="0.1"
+                    value={props.modelScale || 1.0}
+                    onChange={(e) => updateProp('modelScale', parseFloat(e.target.value))}
+                    className="w-full accent-indigo-600 cursor-pointer"
+                  />
+                </div>
+
+                <div className="space-y-2.5 border-t border-zinc-805 pt-3.5 mt-3.5">
+                  <label className="text-[10px] font-semibold text-zinc-550 uppercase tracking-wider font-mono">3D Settings</label>
+                  
+                  <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!props.modelAutoRotate}
+                      onChange={(e) => updateProp('modelAutoRotate', e.target.checked)}
+                      className="rounded border-zinc-800 text-indigo-600 focus:ring-indigo-500 bg-zinc-950"
+                    />
+                    <span>Enable Auto-Rotation</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!props.modelInteractive}
+                      onChange={(e) => updateProp('modelInteractive', e.target.checked)}
+                      className="rounded border-zinc-800 text-indigo-600 focus:ring-indigo-500 bg-zinc-950"
+                    />
+                    <span>Enable Orbit Interaction</span>
+                  </label>
+                </div>
+              </>
+            )}
+
             {/* Grid layout settings can fit here or in Layout Tab */}
             {type === 'Grid' && (
               <div className="p-3 bg-zinc-950 rounded border border-zinc-850 flex flex-col gap-2">
@@ -313,8 +437,74 @@ export default function PropertyInspector({ selectedComponent, onUpdateProps }: 
         {activeTab === 'style' && (
           <div className="space-y-4">
             
+            {/* Box Model Sizing */}
+            <div className="space-y-3">
+              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-indigo-400" /> Sizing (Width & Height)
+              </label>
+              <div className="flex gap-2">
+                <div className="flex-1 space-y-1">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Width</label>
+                  <input
+                    type="text"
+                    value={props.width || 'auto'}
+                    onChange={(e) => updateProp('width', e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="320px, 100%, etc"
+                  />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Height</label>
+                  <input
+                    type="text"
+                    value={props.height || 'auto'}
+                    onChange={(e) => updateProp('height', e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="200px, auto, etc"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Transform Positions */}
+            <div className="space-y-3 border-t border-zinc-800 pt-3">
+              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-emerald-400" /> Canvas Box (Absolute Pos)
+              </label>
+              <div className="flex gap-2">
+                <div className="flex-[2] space-y-1">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Top offset (Y)</label>
+                  <input
+                    type="number"
+                    value={props.top !== undefined ? props.top : 120}
+                    onChange={(e) => updateProp('top', parseInt(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                </div>
+                <div className="flex-[2] space-y-1">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Left offset (X)</label>
+                  <input
+                    type="number"
+                    value={props.left !== undefined ? props.left : 100}
+                    onChange={(e) => updateProp('left', parseInt(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono"
+                  />
+                </div>
+                <div className="flex-[1.5] space-y-1">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Rotate</label>
+                  <input
+                    type="number"
+                    value={props.rotation !== undefined ? props.rotation : 0}
+                    onChange={(e) => updateProp('rotation', parseInt(e.target.value) || 0)}
+                    className="w-full px-2.5 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono"
+                    placeholder="deg"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Background Color Swatches */}
-            <div className="space-y-2">
+            <div className="space-y-2 border-t border-zinc-800 pt-3">
               <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1">
                 <Palette className="w-3.5 h-3.5 text-zinc-500" /> Background Color
               </label>
@@ -385,6 +575,22 @@ export default function PropertyInspector({ selectedComponent, onUpdateProps }: 
                     <option value="text-xl">Extra Large (20px)</option>
                     <option value="text-2xl">2X Large (24px)</option>
                     <option value="text-3xl">3X Large (30px)</option>
+                  </select>
+                </div>
+
+                {/* Line Height */}
+                <div className="space-y-1 mt-2">
+                  <label className="text-[9px] text-zinc-500 font-semibold uppercase">Line Height</label>
+                  <select
+                    value={props.lineHeight || 'leading-normal'}
+                    onChange={(e) => updateProp('lineHeight', e.target.value)}
+                    className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                  >
+                    <option value="leading-none">None (1.0)</option>
+                    <option value="leading-tight">Tight (1.25)</option>
+                    <option value="leading-normal">Normal (1.5)</option>
+                    <option value="leading-relaxed">Relaxed (1.625)</option>
+                    <option value="leading-loose">Loose (2.0)</option>
                   </select>
                 </div>
 
@@ -613,6 +819,74 @@ export default function PropertyInspector({ selectedComponent, onUpdateProps }: 
                   <option value="mx-2">Small (8px)</option>
                   <option value="mx-4">Medium (16px)</option>
                   <option value="mx-auto">Auto (Center Element)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Flexbox Alignment Settings */}
+            <div className="space-y-3.5 border-t border-zinc-800 pt-3.5">
+              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Grid className="w-3.5 h-3.5 text-indigo-400" /> Flexbox Alignment
+              </label>
+
+              {/* Flex Direction */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-zinc-500 font-semibold uppercase">Flex Direction</label>
+                <select
+                  value={props.flexDirection || 'flex-col'}
+                  onChange={(e) => updateProp('flexDirection', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                >
+                  <option value="flex-col">Column (Vertical)</option>
+                  <option value="flex-row">Row (Horizontal)</option>
+                </select>
+              </div>
+
+              {/* Justify Content */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-zinc-500 font-semibold uppercase">Justify Content</label>
+                <select
+                  value={props.justifyContent || 'justify-start'}
+                  onChange={(e) => updateProp('justifyContent', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                >
+                  <option value="justify-start">Start</option>
+                  <option value="justify-end">End</option>
+                  <option value="justify-center">Center</option>
+                  <option value="justify-between">Space Between</option>
+                  <option value="justify-around">Space Around</option>
+                </select>
+              </div>
+
+              {/* Align Items */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-zinc-500 font-semibold uppercase">Align Items</label>
+                <select
+                  value={props.alignItems || 'items-center'}
+                  onChange={(e) => updateProp('alignItems', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                >
+                  <option value="items-start">Start (Left/Top)</option>
+                  <option value="items-end">End (Right/Bottom)</option>
+                  <option value="items-center">Center</option>
+                  <option value="items-stretch">Stretch</option>
+                </select>
+              </div>
+
+              {/* Flex / Grid Gap */}
+              <div className="space-y-1">
+                <label className="text-[9px] text-zinc-500 font-semibold uppercase">Gap Size (Spacing)</label>
+                <select
+                  value={props.gap || 'gap-6'}
+                  onChange={(e) => updateProp('gap', e.target.value)}
+                  className="w-full px-3 py-1.5 text-xs bg-zinc-950 border border-zinc-800 rounded text-white focus:outline-none focus:border-indigo-500 font-mono text-[10px]"
+                >
+                  <option value="gap-0">Gap 0 (0px)</option>
+                  <option value="gap-2">Gap 2 (8px)</option>
+                  <option value="gap-4">Gap 4 (16px)</option>
+                  <option value="gap-6">Gap 6 (24px)</option>
+                  <option value="gap-8">Gap 8 (32px)</option>
+                  <option value="gap-12">Gap 12 (48px)</option>
                 </select>
               </div>
             </div>
