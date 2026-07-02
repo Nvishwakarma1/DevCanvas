@@ -7,7 +7,8 @@ import {
   Copy, 
   ChevronUp, 
   ChevronDown,
-  LayoutTemplate
+  LayoutTemplate,
+  Zap
 } from 'lucide-react';
 import type { CanvasComponent, BreakpointType, ComponentProps, PageSettings } from '../types/canvas';
 import ThreeDModelViewer from './ThreeDModelViewer';
@@ -50,11 +51,43 @@ export default function VisualCanvas({
   const domNodesRef = useRef<{[id: string]: HTMLDivElement | null}>({});
   const [, forceUpdate] = useState({});
   const [activeGuides, setActiveGuides] = useState<SnapLine[]>([]);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [visibleRect, setVisibleRect] = useState<{ top: number; bottom: number; left: number; right: number } | null>(null);
 
   // Trigger manual handles re-draw when selected node moves
   useEffect(() => {
     forceUpdate({});
   }, [components, selectedId]);
+
+  // Phase 1.3 — Viewport scrolling intersection observer & virtualization tracking
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const scrollTop = container.scrollTop;
+      const scrollLeft = container.scrollLeft;
+      const clientHeight = container.clientHeight;
+      const clientWidth = container.clientWidth;
+
+      // Overscan threshold of 200px to allow smooth transition rendering
+      setVisibleRect({
+        top: scrollTop - 200,
+        bottom: scrollTop + clientHeight + 200,
+        left: scrollLeft - 200,
+        right: scrollLeft + clientWidth + 200
+      });
+    };
+
+    handleScroll();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
 
   // Track coordinates for cursor followers
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -65,7 +98,6 @@ export default function VisualCanvas({
     });
   };
 
-  // Get frame width classes based on active device breakpoint
   const getBreakpointWidth = () => {
     switch (breakpoint) {
       case 'mobile':
@@ -132,12 +164,11 @@ export default function VisualCanvas({
     const guides: SnapLine[] = [];
 
     // Filter top-level components that are NOT the dragged component
-    const otherComps = components.filter(c => c.id !== draggingId);
+    const otherComps = components.filter(c => c.id !== draggingId && c.layoutMode !== 'flow');
 
     let verticalSnapped = false;
     let horizontalSnapped = false;
 
-    // 1. Calculate Snapped Coordinates
     for (const other of otherComps) {
       const otherEl = domNodesRef.current[other.id];
       if (!otherEl) continue;
@@ -196,7 +227,6 @@ export default function VisualCanvas({
       }
     }
 
-    // 2. Accumulate matching guidelines at the snapped position
     if (verticalSnapped || horizontalSnapped) {
       const snappedCompCenterX = snappedLeft + compWidth / 2;
       const snappedCompRight = snappedLeft + compWidth;
@@ -217,7 +247,6 @@ export default function VisualCanvas({
         const otherBottom = otherTop + otherHeight;
         const otherCenterY = otherTop + otherHeight / 2;
 
-        // Check vertical alignments
         if (
           Math.abs(snappedLeft - otherLeft) < 1 ||
           Math.abs(snappedLeft - otherRight) < 1 ||
@@ -232,7 +261,6 @@ export default function VisualCanvas({
           guides.push({ type: 'v', coord: matchX });
         }
 
-        // Check horizontal alignments
         if (
           Math.abs(snappedTop - otherTop) < 1 ||
           Math.abs(snappedTop - otherBottom) < 1 ||
@@ -249,7 +277,6 @@ export default function VisualCanvas({
       }
     }
 
-    // Deduplicate
     const uniqueGuides: SnapLine[] = [];
     const seen = new Set<string>();
     for (const g of guides) {
@@ -263,9 +290,10 @@ export default function VisualCanvas({
     return { snappedLeft, snappedTop, guides: uniqueGuides };
   };
 
-  // Draggable Absolute Position logic
   const handleMoveStart = (e: MouseEvent, comp: CanvasComponent) => {
-    if (e.button !== 0) return; // Left click only
+    if (e.button !== 0) return;
+    if (comp.layoutMode === 'flow') return; // Disable absolute drag for relative flow mode elements
+
     const target = e.target as HTMLElement;
     if (
       target.closest('.action-btn') || 
@@ -286,7 +314,6 @@ export default function VisualCanvas({
     const initialTop = comp.props.top !== undefined ? comp.props.top : 120;
     const initialLeft = comp.props.left !== undefined ? comp.props.left : 100;
 
-    // Cache the dragged element's actual dimensions on drag start
     const compEl = domNodesRef.current[comp.id];
     const compWidth = compEl ? compEl.offsetWidth : parseInt(comp.props.width || '') || 320;
     const compHeight = compEl ? compEl.offsetHeight : parseInt(comp.props.height || '') || 120;
@@ -315,17 +342,15 @@ export default function VisualCanvas({
     };
 
     const handleWindowMouseUp = () => {
-      setActiveGuides([]); // Clear guidelines
+      setActiveGuides([]);
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
-      // Optional: we can add a history commit here, but for now we skip to avoid refactoring props.
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
   };
 
-  // Resizing transformations math
   const handleResizeStart = (e: MouseEvent, direction: string, rect: DOMRect, comp: CanvasComponent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -348,7 +373,7 @@ export default function VisualCanvas({
       if (direction.includes('r')) {
         newWidth = Math.max(50, initialWidth + dx);
       }
-      if (direction.includes('l')) {
+      if (direction.includes('l') && comp.layoutMode !== 'flow') {
         const potentialWidth = initialWidth - dx;
         if (potentialWidth > 50) {
           newWidth = potentialWidth;
@@ -358,7 +383,7 @@ export default function VisualCanvas({
       if (direction.includes('b')) {
         newHeight = Math.max(30, initialHeight + dy);
       }
-      if (direction.includes('t')) {
+      if (direction.includes('t') && comp.layoutMode !== 'flow') {
         const potentialHeight = initialHeight - dy;
         if (potentialHeight > 30) {
           newHeight = potentialHeight;
@@ -369,8 +394,8 @@ export default function VisualCanvas({
       onUpdateComponentProps(comp.id, {
         width: `${newWidth}px`,
         height: comp.type === 'ThreeDAsset' || comp.props.height !== 'auto' ? `${newHeight}px` : 'auto',
-        top: Math.max(0, newTop),
-        left: Math.max(0, newLeft),
+        top: comp.layoutMode === 'flow' ? undefined : Math.max(0, newTop),
+        left: comp.layoutMode === 'flow' ? undefined : Math.max(0, newLeft),
       });
     };
 
@@ -383,7 +408,6 @@ export default function VisualCanvas({
     window.addEventListener('mouseup', handleWindowMouseUp);
   };
 
-  // Rotation Transformations Math
   const handleRotateStart = (e: MouseEvent, rect: DOMRect, comp: CanvasComponent) => {
     e.stopPropagation();
     e.preventDefault();
@@ -405,30 +429,36 @@ export default function VisualCanvas({
 
     window.addEventListener('mousemove', handleWindowMouseMove);
     window.addEventListener('mouseup', handleWindowMouseUp);
-  };
-
-  // Render element transformations overlays
-  const renderTransformHandles = (c: CanvasComponent) => {
+  };  const renderTransformHandles = (c: CanvasComponent) => {
     const el = domNodesRef.current[c.id];
     if (!el) return null;
     const rect = el.getBoundingClientRect();
 
-    const handles = [
-      { dir: 'tl', style: { top: -4, left: -4, cursor: 'nwse-resize' } },
-      { dir: 'tc', style: { top: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
-      { dir: 'tr', style: { top: -4, right: -4, cursor: 'nesw-resize' } },
-      { dir: 'mr', style: { top: '50%', right: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
-      { dir: 'br', style: { bottom: -4, right: -4, cursor: 'nwse-resize' } },
-      { dir: 'bc', style: { bottom: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
-      { dir: 'bl', style: { bottom: -4, left: -4, cursor: 'nesw-resize' } },
-      { dir: 'ml', style: { top: '50%', left: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
-    ];
+    // Limit transform handles in relative flow mode (no top-left resizing, no rotation stem)
+    const isFlow = c.layoutMode === 'flow';
+
+    const handles = isFlow 
+      ? [
+          { dir: 'mr', style: { top: '50%', right: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+          { dir: 'br', style: { bottom: -4, right: -4, cursor: 'nwse-resize' } },
+          { dir: 'bc', style: { bottom: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+        ]
+      : [
+          { dir: 'tl', style: { top: -4, left: -4, cursor: 'nwse-resize' } },
+          { dir: 'tc', style: { top: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+          { dir: 'tr', style: { top: -4, right: -4, cursor: 'nesw-resize' } },
+          { dir: 'mr', style: { top: '50%', right: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+          { dir: 'br', style: { bottom: -4, right: -4, cursor: 'nwse-resize' } },
+          { dir: 'bc', style: { bottom: -4, left: '50%', transform: 'translateX(-50%)', cursor: 'ns-resize' } },
+          { dir: 'bl', style: { bottom: -4, left: -4, cursor: 'nesw-resize' } },
+          { dir: 'ml', style: { top: '50%', left: -4, transform: 'translateY(-50%)', cursor: 'ew-resize' } },
+        ];
 
     return (
       <>
-        {/* Selected Border outline */}
+        {/* Selection UI: outline-indigo-500 outline-dashed outline-2 */}
         <div 
-          className="absolute border border-dashed border-indigo-500 pointer-events-none rounded z-35"
+          className="absolute pointer-events-none rounded z-35 outline-indigo-500 outline-dashed outline-2"
           style={{
             top: -2,
             left: -2,
@@ -437,21 +467,23 @@ export default function VisualCanvas({
           }}
         />
 
-        {/* Rotate stem handle */}
-        <div
-          onMouseDown={(e) => handleRotateStart(e, rect, c)}
-          className="absolute left-1/2 w-0.5 h-6 bg-indigo-500 z-40 -top-6 -translate-x-1/2 cursor-alias rotate-stem flex items-center justify-center"
-          title="Drag to Rotate"
-        >
-          <div className="w-2.5 h-2.5 rounded-full bg-indigo-650 border border-white hover:bg-white transition-colors" />
-        </div>
+        {/* Rotate stem handle (absolute only) */}
+        {!isFlow && (
+          <div
+            onMouseDown={(e) => handleRotateStart(e, rect, c)}
+            className="absolute left-1/2 w-0.5 h-6 bg-indigo-500 z-40 -top-6 -translate-x-1/2 cursor-alias rotate-stem flex items-center justify-center"
+            title="Drag to Rotate"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-indigo-600 border border-white hover:bg-white transition-colors" />
+          </div>
+        )}
 
-        {/* Resize handle points */}
+        {/* Resize handle points: solid white squares with indigo borders */}
         {handles.map((h) => (
           <div
             key={h.dir}
             onMouseDown={(e) => handleResizeStart(e, h.dir, rect, c)}
-            className="absolute w-2 h-2 bg-indigo-600 border border-white rounded-full z-40 shadow shadow-indigo-950 resize-handle hover:bg-indigo-300 transition-colors"
+            className="absolute w-2 h-2 bg-white border border-indigo-500 z-40 resize-handle"
             style={h.style as any}
           />
         ))}
@@ -459,27 +491,26 @@ export default function VisualCanvas({
     );
   };
 
-  // Render a component's action toolbar
   const renderActions = (id: string) => {
     return (
-      <div className="absolute -top-3.5 right-2 z-30 flex items-center bg-indigo-600 rounded shadow-md border border-indigo-500 overflow-hidden text-white text-[10px] action-btn select-none">
+      <div className="absolute -top-3.5 right-2 z-30 flex items-center bg-[#141414] rounded border border-zinc-800 overflow-hidden text-white text-[10px] action-btn select-none">
         <button
           onClick={(e) => { e.stopPropagation(); onMoveComponent(id, 'up'); }}
-          className="p-1 hover:bg-indigo-500 transition-colors border-r border-indigo-500 cursor-pointer"
+          className="p-1 hover:bg-zinc-800 transition-colors border-r border-zinc-800 cursor-pointer"
           title="Move Up"
         >
           <ChevronUp className="w-3 h-3" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onMoveComponent(id, 'down'); }}
-          className="p-1 hover:bg-indigo-500 transition-colors border-r border-indigo-500 cursor-pointer"
+          className="p-1 hover:bg-zinc-800 transition-colors border-r border-zinc-800 cursor-pointer"
           title="Move Down"
         >
           <ChevronDown className="w-3 h-3" />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDuplicateComponent(id); }}
-          className="p-1 hover:bg-indigo-500 transition-colors border-r border-indigo-500 cursor-pointer"
+          className="p-1 hover:bg-zinc-800 transition-colors border-r border-zinc-800 cursor-pointer"
           title="Duplicate Element"
         >
           <Copy className="w-3 h-3" />
@@ -495,22 +526,63 @@ export default function VisualCanvas({
     );
   };
 
-  // Recursive renderer function
   const renderComponent = (c: CanvasComponent, isNested = false) => {
     const isSelected = selectedId === c.id;
     const p = c.props;
     const classList = getComponentClasses(p);
+
+    // Phase 1.3 — Canvas Virtualization
+    // If not visible in scroll viewport and not selected, render a placeholder.
+    if (visibleRect && !isSelected && !isNested) {
+      const top = p.top !== undefined ? p.top : 120;
+      const left = p.left !== undefined ? p.left : 100;
+      const heightVal = p.height && p.height !== 'auto' ? parseInt(p.height) || 120 : 120;
+      const widthVal = p.width ? parseInt(p.width) || 320 : 320;
+
+      const compBottom = top + heightVal;
+      const compRight = left + widthVal;
+
+      const isOut = (
+        compBottom < visibleRect.top ||
+        top > visibleRect.bottom ||
+        compRight < visibleRect.left ||
+        left > visibleRect.right
+      );
+
+      if (isOut) {
+        // Lightweight virtualized bounding placeholder container
+        return (
+          <div
+            key={c.id}
+            ref={el => { domNodesRef.current[c.id] = el; }}
+            style={{
+              position: c.layoutMode === 'flow' ? 'relative' : 'absolute',
+              top: c.layoutMode === 'flow' ? undefined : `${top}px`,
+              left: c.layoutMode === 'flow' ? undefined : `${left}px`,
+              width: `${widthVal}px`,
+              height: `${heightVal}px`,
+            }}
+            onClick={(e) => { e.stopPropagation(); onSelectComponent(c.id); }}
+            className="border border-dashed border-zinc-800/40 rounded-xl bg-zinc-950/10 flex items-center justify-center text-[9px] text-zinc-700 font-mono"
+          >
+            Virtualized {c.type}
+          </div>
+        );
+      }
+    }
 
     const handleClick = (e: MouseEvent) => {
       e.stopPropagation();
       onSelectComponent(c.id);
     };
 
-    // Absolute or Nested position style binding
-    const layoutStyle: React.CSSProperties = isNested 
+    // Phase 1.4 — Fluid Layout relative style calculations
+    const isFlowMode = c.layoutMode === 'flow';
+
+    const layoutStyle: React.CSSProperties = (isNested || isFlowMode)
       ? {
           position: 'relative',
-          width: p.width || '105%',
+          width: p.width || '100%',
           height: p.height || 'auto',
           transform: p.rotation ? `rotate(${p.rotation}deg)` : undefined,
           zIndex: isSelected ? 40 : 10,
@@ -525,13 +597,12 @@ export default function VisualCanvas({
           zIndex: isSelected ? 40 : 10,
         };
 
-    const wrapperClasses = `group transition-shadow ${
+    const wrapperClasses = `group transition-shadow relative ${
       isSelected 
-        ? 'ring-1 ring-indigo-500 rounded shadow-2xl shadow-indigo-500/10' 
+        ? 'rounded shadow-2xl shadow-violet-500/10' 
         : 'hover:outline hover:outline-1 hover:outline-dashed hover:outline-zinc-700 hover:outline-offset-1 rounded'
     }`;
 
-    // Switch case to render component types visually
     const renderNode = () => {
       switch (c.type) {
         case 'Header': {
@@ -541,10 +612,10 @@ export default function VisualCanvas({
               <div className="font-bold text-lg tracking-tight">{p.logoText || 'DevCanvas'}</div>
               <nav className="hidden md:flex items-center gap-4 text-xs font-semibold">
                 {links.map((link, idx) => (
-                  <span key={idx} className="hover:text-indigo-400 transition-colors">{link}</span>
+                  <span key={idx} className="hover:text-violet-400 transition-colors">{link}</span>
                 ))}
               </nav>
-              <button className="px-3 py-1.5 text-xs font-semibold rounded bg-indigo-650 text-white hover:bg-indigo-700 transition-all pointer-events-none">
+              <button className="px-3 py-1.5 text-xs font-semibold rounded bg-violet-600 text-white hover:bg-violet-700 transition-all pointer-events-none">
                 {p.buttonText || 'Get Started'}
               </button>
             </header>
@@ -558,7 +629,7 @@ export default function VisualCanvas({
                 <img className="w-full h-32 object-cover rounded-lg mb-2.5 pointer-events-none" src={p.imageUrl} alt="Card image" />
               )}
               {p.badgeText && (
-                <span className="self-start inline-block px-2 py-0.5 rounded text-[9px] font-semibold bg-indigo-500/15 text-indigo-400 mb-1.5">
+                <span className="self-start inline-block px-2 py-0.5 rounded text-[9px] font-semibold bg-violet-500/15 text-violet-400 mb-1.5">
                   {p.badgeText}
                 </span>
               )}
@@ -567,7 +638,7 @@ export default function VisualCanvas({
                 {p.description || 'Provide detailed descriptions of your feature or product here.'}
               </p>
               {p.buttonText && (
-                <button className="w-full py-1 text-[10px] font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white mt-auto pointer-events-none">
+                <button className="w-full py-1 text-[10px] font-semibold rounded bg-violet-600 hover:bg-violet-500 text-white mt-auto pointer-events-none">
                   {p.buttonText}
                 </button>
               )}
@@ -582,7 +653,7 @@ export default function VisualCanvas({
           } else if (p.buttonVariant === 'ghost') {
             variantClasses = 'hover:bg-zinc-800 text-zinc-400 hover:text-white';
           } else {
-            variantClasses = 'bg-indigo-600 hover:bg-indigo-700 text-white';
+            variantClasses = 'bg-violet-600 hover:bg-violet-700 text-white';
           }
           const isCustomBg = p.bgColor && p.bgColor !== 'bg-transparent';
           const bgStyle = isCustomBg ? p.bgColor : variantClasses;
@@ -620,7 +691,7 @@ export default function VisualCanvas({
                 </div>
               )}
 
-              <button className="w-full py-1.5 text-[10px] font-semibold rounded bg-indigo-600 hover:bg-indigo-500 text-white mt-1 pointer-events-none">
+              <button className="w-full py-1.5 text-[10px] font-semibold rounded bg-violet-600 hover:bg-violet-500 text-white mt-1 pointer-events-none">
                 {p.buttonText || 'Submit Form'}
               </button>
             </form>
@@ -667,6 +738,7 @@ export default function VisualCanvas({
                 autoRotate={!!p.modelAutoRotate}
                 scale={p.modelScale || 1.5}
                 interactive={!!p.modelInteractive}
+                bindings={p.model3DBindings}
               />
             </div>
           );
@@ -716,10 +788,43 @@ export default function VisualCanvas({
           );
         }
 
+        case 'Container': {
+          return (
+            <div 
+              onDragOver={handleCanvasDragOver}
+              onDrop={(e) => handleCanvasDrop(e, c.id)}
+              className={`${classList} flex flex-col w-full h-full min-h-[100px] border border-dashed border-zinc-800/80 rounded-lg p-3 cursor-grab active:cursor-grabbing`}
+            >
+              <div className="flex items-center justify-between text-[8px] text-zinc-550 font-mono mb-1.5 uppercase select-none pointer-events-none">
+                <span>Box Container Drop Zone</span>
+              </div>
+              <div className="flex-1 w-full h-full min-h-[60px] relative">
+                {(c.children || []).length > 0 ? (
+                  c.children!.map((child) => renderComponent(child, true))
+                ) : (
+                  <div className="border border-dashed border-zinc-805 rounded bg-zinc-950/20 p-2 flex items-center justify-center text-[8px] text-zinc-650 pointer-events-none h-full min-h-[60px]">
+                    Drag components inside
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        case 'Breaker': {
+          return (
+            <div className={`w-full flex items-center justify-center py-2 select-none cursor-grab active:cursor-grabbing`}>
+              <div className={`w-full ${classList}`} style={{ height: p.height || '2px' }} />
+            </div>
+          );
+        }
+
         default:
           return null;
       }
     };
+
+    const hasLogic = c.logicBindings && c.logicBindings.length > 0;
 
     return (
       <div 
@@ -730,6 +835,12 @@ export default function VisualCanvas({
         onMouseDown={(e) => !isNested && handleMoveStart(e, c)}
         className={wrapperClasses}
       >
+        {/* Phase 2.2 — Logic Wiring indicator badge */}
+        {hasLogic && (
+          <div className="absolute -top-2 -left-2 z-40 bg-amber-500 text-black p-0.5 rounded-full shadow border border-black animate-pulse" title="Active Event Wiring">
+            <Zap className="w-2.5 h-2.5 fill-current" />
+          </div>
+        )}
         {isSelected && renderActions(c.id)}
         {renderNode()}
         {isSelected && renderTransformHandles(c)}
@@ -745,14 +856,13 @@ export default function VisualCanvas({
     ? { cursor: `url(${pageSettings.customCursorUrl}) 16 16, auto` }
     : {};
 
-  // Custom Neon Follower cursor overlays
   const renderCursorFollower = () => {
     if (pageSettings.cursorPreset === 'default' || pageSettings.cursorPreset === 'custom') return null;
 
     if (pageSettings.cursorPreset === 'glowing-circle') {
       return (
         <div
-          className="absolute pointer-events-none z-[999] w-6 h-6 rounded-full border border-indigo-500 bg-indigo-500/20 blur-[0.5px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
+          className="absolute pointer-events-none z-[999] w-6 h-6 rounded-full border border-violet-500 bg-violet-500/20 blur-[0.5px] -translate-x-1/2 -translate-y-1/2 transition-transform duration-75 ease-out"
           style={{ left: mousePos.x + 'px', top: mousePos.y + 'px' }}
         />
       );
@@ -761,11 +871,11 @@ export default function VisualCanvas({
     if (pageSettings.cursorPreset === 'neon-crosshair') {
       return (
         <div
-          className="absolute pointer-events-none z-[999] -translate-x-1/2 -translate-y-1/2 text-emerald-450"
+          className="absolute pointer-events-none z-[999] -translate-x-1/2 -translate-y-1/2 text-amber-500"
           style={{ left: mousePos.x + 'px', top: mousePos.y + 'px' }}
         >
           <svg className="w-5 h-5 animate-spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="8" strokeDasharray="4 2" />
+            <circle cx="12" cy="12" r="8" stroke-dasharray="4 2" />
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
             <circle cx="12" cy="12" r="1.5" fill="currentColor" />
           </svg>
@@ -776,135 +886,121 @@ export default function VisualCanvas({
     return null;
   };
 
+  const [zoomScale, setZoomScale] = useState<number>(100);
+
+  const getArtboardDimensions = () => {
+    switch (breakpoint) {
+      case 'mobile':
+        return { width: '375px', minHeight: '812px' };
+      case 'tablet':
+        return { width: '768px', minHeight: '1024px' };
+      case 'desktop':
+      default:
+        return { width: '100%', maxWidth: '1440px', minHeight: '800px' };
+    }
+  };
+
   return (
-    <section className="flex-1 flex flex-col min-h-0 bg-zinc-950 select-none">
+    <section className="flex-grow flex flex-col min-h-0 bg-[#0a0a0a] select-none relative overflow-hidden">
       
-      {/* Breakpoint Switcher Top Bar */}
-      <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-6 flex-shrink-0">
-        <span className="text-xs font-semibold text-zinc-400">Visual Designer Canvas</span>
-        
-        {/* Breakpoints */}
-        <div className="flex bg-zinc-950 border border-zinc-800 p-0.5 rounded-lg gap-0.5 select-none">
+      {/* Floating pill component switcher at the top-center of the Workspace Container */}
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex bg-zinc-900/90 backdrop-blur p-1 rounded-full shadow-xl gap-0.5 select-none border border-zinc-800">
           {[
-            { value: 'desktop' as const, label: 'Desktop', icon: <Monitor className="w-4 h-4" /> },
-            { value: 'tablet' as const, label: 'Tablet (768px)', icon: <Tablet className="w-4 h-4" /> },
-            { value: 'mobile' as const, label: 'Mobile (375px)', icon: <Smartphone className="w-4 h-4" /> },
+            { value: 'desktop' as const, label: 'Desktop', icon: <Monitor className="w-3.5 h-3.5" /> },
+            { value: 'tablet' as const, label: 'Tablet', icon: <Tablet className="w-3.5 h-3.5" /> },
+            { value: 'mobile' as const, label: 'Mobile', icon: <Smartphone className="w-3.5 h-3.5" /> },
           ].map((item) => (
             <button
               key={item.value}
               onClick={() => onChangeBreakpoint(item.value)}
-              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition-all cursor-pointer ${
                 breakpoint === item.value
-                  ? 'bg-zinc-800 text-white shadow-md'
-                  : 'text-zinc-500 hover:text-zinc-350'
+                  ? 'bg-zinc-850 text-white shadow-sm border border-zinc-700'
+                  : 'text-zinc-400 hover:text-zinc-200'
               }`}
+              title={item.label}
             >
               {item.icon}
-              <span className="hidden sm:inline">{item.label}</span>
+              <span>{item.label}</span>
             </button>
           ))}
-        </div>
-
-        <div className="w-20" /> {/* Spacer */}
       </div>
 
-      {/* Main Canvas Scroll Area */}
+      {/* Floating canvas zoom controls at the bottom center */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center bg-zinc-900/95 backdrop-blur p-1.5 rounded-full shadow-xl gap-2 select-none border border-zinc-800 text-xs font-semibold h-9 px-3">
+        <button 
+          onClick={() => setZoomScale(prev => Math.max(25, prev - 10))}
+          className="w-6 h-6 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+          title="Zoom Out"
+        >
+          -
+        </button>
+        <button 
+          onClick={() => setZoomScale(100)}
+          className="px-2 hover:text-white text-zinc-300 transition-colors text-[11px] font-mono cursor-pointer"
+          title="Reset Zoom to 100%"
+        >
+          {zoomScale}%
+        </button>
+        <button 
+          onClick={() => setZoomScale(prev => Math.min(200, prev + 10))}
+          className="w-6 h-6 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+          title="Zoom In"
+        >
+          +
+        </button>
+      </div>
+
+      {/* Main Canvas Scroll Area (Workspace Container - flex items-center justify-center) */}
       <div 
+        ref={scrollContainerRef}
         onClick={() => onSelectComponent(null)}
         onMouseMove={handleMouseMove}
         style={customCursorStyle}
-        className={`flex-1 overflow-y-auto p-8 relative flex justify-center items-start min-h-0 ${canvasCursorClass}`}
+        className={`flex-1 overflow-auto p-12 relative flex justify-center items-start min-h-0 ${canvasCursorClass} inspector-scroll bg-zinc-950`}
       >
-        {/* Interactive Background Engine */}
-        <BackgroundEngine preset={pageSettings.bgPreset} />
-
         {/* Cursor follower overlay */}
         {renderCursorFollower()}
 
-        {/* Breakpoint Frame Wrapper */}
-        <div className={`transition-all duration-300 ${getBreakpointWidth()} h-full`}>
-          {breakpoint === 'desktop' ? (
-            /* Root Droppable Canvas for Desktop */
+        {/* The Artboard Constraint: Strict Width and Min-Height per device */}
+        <div 
+          onDragOver={handleCanvasDragOver}
+          onDrop={(e) => handleCanvasDrop(e)}
+          style={{
+            ...getArtboardDimensions(),
+            transform: `scale(${zoomScale / 100})`,
+            transformOrigin: 'top center',
+            backgroundColor: pageSettings.customBgColor || undefined
+          }} 
+          className="relative bg-white shadow-2xl ring-1 ring-zinc-700 rounded-xl artboard-transition overflow-y-auto"
+        >
+          {/* Background Engine constrained to the Artboard only */}
+          <BackgroundEngine preset={pageSettings.bgPreset} settings={pageSettings} />
+
+          {/* Snap alignment guidelines - highly visible red/blue 1px guides */}
+          {activeGuides.map((guide, idx) => (
             <div
-              onDragOver={handleCanvasDragOver}
-              onDrop={(e) => handleCanvasDrop(e)}
-              className="w-full min-h-full relative overflow-y-auto min-h-[600px] border border-zinc-900/30 rounded-xl"
-            >
-              {/* Snap alignment guidelines */}
-              {activeGuides.map((guide, idx) => (
-                <div
-                  key={idx}
-                  className="absolute border-red-500 pointer-events-none z-[9999]"
-                  style={{
-                    borderStyle: 'dashed',
-                    borderWidth: guide.type === 'h' ? '1.5px 0 0 0' : '0 0 0 1.5px',
-                    top: guide.type === 'h' ? `${guide.coord}px` : '0px',
-                    left: guide.type === 'v' ? `${guide.coord}px` : '0px',
-                    width: guide.type === 'h' ? '100%' : '1.5px',
-                    height: guide.type === 'v' ? '100%' : '1.5px',
-                  }}
-                />
-              ))}
+              key={idx}
+              className={`absolute pointer-events-none z-[9999] ${guide.type === 'h' ? (idx % 2 === 0 ? 'snap-guide-h-red' : 'snap-guide-h-blue') : (idx % 2 === 0 ? 'snap-guide-v-red' : 'snap-guide-v-blue')}`}
+              style={{
+                top: guide.type === 'h' ? `${guide.coord}px` : '0px',
+                left: guide.type === 'v' ? `${guide.coord}px` : '0px',
+                width: guide.type === 'h' ? '100%' : '1px',
+                height: guide.type === 'v' ? '100%' : '1px',
+              }}
+            />
+          ))}
 
-              {components.length > 0 ? (
-                components.map((comp) => renderComponent(comp))
-              ) : (
-                /* Root Canvas Empty State */
-                <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center pointer-events-none select-none">
-                  <LayoutTemplate className="w-12 h-12 text-zinc-800 mb-4 animate-float" />
-                  <h3 className="text-sm font-semibold text-zinc-500">Your Canvas is Empty</h3>
-                  <p className="text-xs text-zinc-650 mt-1 max-w-[280px] leading-relaxed">
-                    Click items in the Component Library or drag them directly here to start building your visual UI template.
-                  </p>
-                </div>
-              )}
-            </div>
+          {components.length > 0 ? (
+            components.map((comp) => renderComponent(comp))
           ) : (
-            /* Realistic Device Shell Frame for Mobile and Tablet */
-            <div className="flex justify-center h-full">
-              <div className={`relative bg-zinc-950 border-[12px] border-zinc-900 shadow-2xl rounded-[36px] flex flex-col h-full w-full overflow-hidden max-h-[85vh] ${
-                breakpoint === 'mobile' ? 'max-w-[375px]' : 'max-w-[768px]'
-              }`}>
-                {/* Device Speaker Notch */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-5 w-32 bg-zinc-900 rounded-b-xl z-50 flex items-center justify-center">
-                  <span className="w-8 h-1 rounded-full bg-zinc-800" />
-                </div>
-
-                {/* Device Inner Content (Scrollable Droppable) */}
-                <div 
-                  onDragOver={handleCanvasDragOver}
-                  onDrop={(e) => handleCanvasDrop(e)}
-                  className="flex-1 relative overflow-y-auto px-4 py-8 bg-stone-950 mt-1.5 min-h-[450px]"
-                >
-                  {/* Snap alignment guidelines */}
-                  {activeGuides.map((guide, idx) => (
-                    <div
-                      key={idx}
-                      className="absolute border-red-500 pointer-events-none z-[9999]"
-                      style={{
-                        borderStyle: 'dashed',
-                        borderWidth: guide.type === 'h' ? '1.5px 0 0 0' : '0 0 0 1.5px',
-                        top: guide.type === 'h' ? `${guide.coord}px` : '0px',
-                        left: guide.type === 'v' ? `${guide.coord}px` : '0px',
-                        width: guide.type === 'h' ? '100%' : '1.5px',
-                        height: guide.type === 'v' ? '100%' : '1.5px',
-                      }}
-                    />
-                  ))}
-
-                  {components.length > 0 ? (
-                    components.map((comp) => renderComponent(comp))
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-zinc-900/10 pointer-events-none">
-                      <LayoutTemplate className="w-10 h-10 text-zinc-800 mb-3" />
-                      <h3 className="text-xs font-semibold text-zinc-500">Empty Device Frame</h3>
-                      <p className="text-[10px] text-zinc-650 mt-1 max-w-[200px] leading-relaxed">
-                        Drag components from the library and drop inside the device workspace.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
+            /* Artboard Empty State */
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center pointer-events-none select-none z-10">
+              <LayoutTemplate className="w-12 h-12 text-zinc-700 mb-4 animate-float" />
+              <h3 className="text-sm font-semibold text-zinc-400">Your Artboard is Empty</h3>
+              <p className="text-xs text-zinc-650 mt-1 max-w-[280px] leading-relaxed">
+                Click items in the Component Library or drag them directly here to start building your visual UI template.
+              </p>
             </div>
           )}
         </div>

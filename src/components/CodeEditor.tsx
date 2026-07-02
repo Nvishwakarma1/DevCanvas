@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Copy, Check, Download, FileCode, CheckCircle2, RotateCcw } from 'lucide-react';
+import { Copy, Check, Download, FileCode, CheckCircle2, RotateCcw, Box } from 'lucide-react';
 import { highlightHtml } from '../utils/codeGenerator';
 
 interface CodeEditorProps {
@@ -11,6 +11,8 @@ interface CodeEditorProps {
   onSyncToCanvas: () => void;
   onDiscardChanges: () => void;
   onExport: () => void;
+  /** Phase 1.2 — Export Vite/React project folder */
+  onExportReactProject?: () => void;
 }
 
 export default function CodeEditor({ 
@@ -21,19 +23,18 @@ export default function CodeEditor({
   onToggleManualMode, 
   onSyncToCanvas, 
   onDiscardChanges, 
-  onExport 
+  onExport,
+  onExportReactProject
 }: CodeEditorProps) {
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
 
-  // Generate line numbers based on current code string splits
   const lineCount = code.split('\n').length;
   const lineNumbers = Array.from({ length: Math.max(lineCount, 1) }, (_, i) => i + 1);
 
   const isDirty = code !== canvasCode;
 
-  // Sync scroll between textarea and line numbers gutter
   const handleScroll = () => {
     if (textareaRef.current && lineNumbersRef.current) {
       lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -56,7 +57,6 @@ export default function CodeEditor({
     }
   };
 
-  // Intercept Tab key to insert double spaces instead of losing focus
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -68,7 +68,6 @@ export default function CodeEditor({
       
       onChangeCode(newVal);
       
-      // Restore cursor position
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
       }, 0);
@@ -92,10 +91,9 @@ export default function CodeEditor({
       {/* Editor Control Header */}
       <div className="h-10 bg-zinc-900 border-b border-zinc-850 px-4 flex items-center justify-between flex-shrink-0 select-none">
         <div className="flex items-center gap-2">
-          <FileCode className="w-4 h-4 text-indigo-400" />
+          <FileCode className="w-4 h-4 text-violet-400" />
           <span className="text-xs font-semibold text-zinc-300">Code Panel</span>
           
-          {/* Preview vs Edit Mode tabs */}
           <div className="flex bg-zinc-950 border border-zinc-800 rounded p-0.5 ml-2.5">
             <button
               onClick={() => handleTabChange(false)}
@@ -111,7 +109,7 @@ export default function CodeEditor({
               onClick={() => handleTabChange(true)}
               className={`px-2.5 py-0.5 text-[10px] font-bold rounded cursor-pointer transition-all ${
                 isManualMode
-                  ? 'bg-indigo-600 text-white shadow-sm'
+                  ? 'bg-violet-600 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'
               }`}
             >
@@ -119,7 +117,7 @@ export default function CodeEditor({
             </button>
           </div>
 
-          <span className="text-[10px] bg-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded border border-zinc-700 ml-2">
+          <span className="text-[10px] bg-zinc-800 text-zinc-450 px-1.5 py-0.5 rounded border border-zinc-750 ml-2">
             Tailwind CSS v4
           </span>
         </div>
@@ -128,30 +126,42 @@ export default function CodeEditor({
           {/* Copy Code Button */}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-650 text-zinc-300 hover:text-white transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold bg-zinc-850 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition-all cursor-pointer"
             title="Copy snippet to clipboard"
           >
             {copied ? (
               <>
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-emerald-400">Copied!</span>
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span className="text-emerald-450">Copied!</span>
               </>
             ) : (
               <>
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="w-3 h-3" />
                 <span>Copy</span>
               </>
             )}
           </button>
 
+          {/* Phase 1.2 — Export React Project */}
+          {onExportReactProject && (
+            <button
+              onClick={onExportReactProject}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-violet-400 border border-zinc-750 hover:border-zinc-700 transition-all cursor-pointer shadow-sm"
+              title="Download Vite+React Project Bundle (.zip)"
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>Export React</span>
+            </button>
+          )}
+
           {/* Export Code Button */}
           <button
             onClick={onExport}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-semibold bg-indigo-650 hover:bg-indigo-600 text-white border border-indigo-500 hover:border-indigo-400 transition-all cursor-pointer shadow-sm"
-            title="Download full standalone index.html template"
+            className="flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-bold bg-violet-650 hover:bg-violet-600 text-white border border-violet-500 hover:border-violet-400 transition-all cursor-pointer shadow-sm"
+            title="Download full standalone HTML"
           >
-            <Download className="w-3.5 h-3.5" />
-            <span>Export</span>
+            <Download className="w-3 h-3" />
+            <span>HTML</span>
           </button>
         </div>
       </div>
@@ -167,7 +177,7 @@ export default function CodeEditor({
             <button
               onClick={onDiscardChanges}
               className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white transition-all cursor-pointer"
-              title="Discard manual edits and reset to visual canvas layout"
+              title="Discard manual edits and reset"
             >
               <RotateCcw className="w-3 h-3" />
               <span>Discard</span>
@@ -175,7 +185,7 @@ export default function CodeEditor({
             <button
               onClick={onSyncToCanvas}
               className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all cursor-pointer shadow-sm"
-              title="Parse edited HTML and sync back to visual canvas"
+              title="Parse edited HTML and sync"
             >
               <CheckCircle2 className="w-3 h-3" />
               <span>Sync to Canvas</span>
@@ -186,15 +196,13 @@ export default function CodeEditor({
 
       {/* Editor Main Content */}
       {!isManualMode ? (
-        <div className="flex-1 flex overflow-y-auto font-mono text-[11px] leading-5 py-3 bg-zinc-950">
-          {/* Line Numbers Column */}
-          <div className="w-10 text-right select-none text-zinc-600 border-r border-zinc-900 pr-2.5 flex flex-col">
+        <div className="flex-1 flex overflow-y-auto font-mono text-[11px] leading-5 py-3 bg-zinc-950 inspector-scroll">
+          <div className="w-10 text-right select-none text-zinc-650 border-r border-zinc-900 pr-2.5 flex flex-col">
             {lineNumbers.map((num) => (
               <div key={num} className="h-5">{num}</div>
             ))}
           </div>
 
-          {/* Code Content Column */}
           <pre className="flex-1 pl-4 pr-6 overflow-x-auto whitespace-pre select-text m-0">
             <code 
               dangerouslySetInnerHTML={{ __html: highlighted }}
@@ -204,7 +212,6 @@ export default function CodeEditor({
         </div>
       ) : (
         <div className="flex-1 flex overflow-hidden font-mono text-[11px] leading-5 bg-zinc-950 relative">
-          {/* Synced Line Numbers Column */}
           <div 
             ref={lineNumbersRef}
             className="w-10 text-right select-none text-zinc-650 border-r border-zinc-900 pr-2.5 py-3 flex flex-col overflow-hidden bg-zinc-950 flex-shrink-0"
@@ -214,7 +221,6 @@ export default function CodeEditor({
             ))}
           </div>
 
-          {/* Synced Textarea */}
           <textarea
             ref={textareaRef}
             value={code}
@@ -225,7 +231,7 @@ export default function CodeEditor({
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
-            className="flex-1 pl-4 pr-6 py-3 bg-zinc-950 text-zinc-300 focus:text-white focus:outline-none resize-none overflow-auto whitespace-pre leading-5 h-full border-none focus:ring-0 selection:bg-indigo-650/40"
+            className="flex-1 pl-4 pr-6 py-3 bg-zinc-950 text-zinc-300 focus:text-white focus:outline-none resize-none overflow-auto whitespace-pre leading-5 h-full border-none focus:ring-0 selection:bg-violet-650/40"
             placeholder="<!-- Type your custom HTML/Tailwind code here -->"
           />
         </div>

@@ -54,7 +54,7 @@ export function generateComponentHtml(component: CanvasComponent, indentLevel = 
   switch (component.type) {
     case 'Header': {
       const linksHtml = (p.links || ['Home', 'Features', 'Pricing', 'Contact']).map(link => 
-        `<a href="#" class="hover:text-indigo-400 transition-colors">${link}</a>`
+        `<a href="#" class="hover:text-violet-400 transition-colors">${link}</a>`
       ).join(`\n${indent}    `);
 
       return `${indent}<header class="${allStyleClasses} flex items-center justify-between w-full"${inlineStyleAttr}>
@@ -62,16 +62,16 @@ ${indent}  <div class="font-bold text-xl tracking-tight">${p.logoText || 'DevCan
 ${indent}  <nav class="hidden md:flex items-center gap-6 text-sm font-medium">
 ${indent}    ${linksHtml}
 ${indent}  </nav>
-${indent}  <a href="#" class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md bg-indigo-650 text-white hover:bg-indigo-750 transition-colors">
+${indent}  <a href="#" class="inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-md bg-violet-650 text-white hover:bg-violet-750 transition-colors">
 ${indent}    ${p.buttonText || 'Get Started'}
 ${indent}  </a>
 ${indent}</header>`;
     }
 
     case 'Card': {
-      const badgeHtml = p.badgeText ? `\n${indent}    <span class="self-start inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-500/10 text-indigo-400 mb-3">${p.badgeText}</span>` : '';
+      const badgeHtml = p.badgeText ? `\n${indent}    <span class="self-start inline-block px-2.5 py-0.5 rounded text-xs font-semibold bg-violet-500/10 text-violet-400 mb-3">${p.badgeText}</span>` : '';
       const imgHtml = p.imageUrl ? `\n${indent}    <img class="w-full h-48 object-cover rounded-lg mb-4" src="${p.imageUrl}" alt="${p.title || 'Card Image'}">` : '';
-      const btnHtml = p.buttonText ? `\n${indent}    <button class="w-full inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors mt-auto">${p.buttonText}</button>` : '';
+      const btnHtml = p.buttonText ? `\n${indent}    <button class="w-full inline-flex items-center justify-center px-4 py-2 text-sm font-semibold rounded-md bg-violet-600 text-white hover:bg-violet-700 transition-colors mt-auto">${p.buttonText}</button>` : '';
 
       return `${indent}<div class="${allStyleClasses} max-w-sm overflow-hidden flex flex-col h-full"${inlineStyleAttr}>
 ${indent}  <div class="flex flex-col">${imgHtml}${badgeHtml}
@@ -88,7 +88,7 @@ ${indent}</div>`;
       } else if (p.buttonVariant === 'ghost') {
         variantClasses = 'hover:bg-zinc-800 text-zinc-400 hover:text-white';
       } else {
-        variantClasses = 'bg-indigo-600 hover:bg-indigo-700 text-white';
+        variantClasses = 'bg-violet-600 hover:bg-violet-700 text-white';
       }
       
       const isCustomBg = p.bgColor && p.bgColor !== 'bg-transparent';
@@ -102,20 +102,20 @@ ${indent}</button>`;
     case 'InputForm': {
       const nameField = p.showNameField ? `\n${indent}    <div>
 ${indent}      <label class="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Full Name</label>
-${indent}      <input type="text" placeholder="John Doe" class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+${indent}      <input type="text" placeholder="John Doe" class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
 ${indent}    </div>` : '';
       const emailField = p.showEmailField ? `\n${indent}    <div>
 ${indent}      <label class="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Email Address</label>
-${indent}      <input type="email" placeholder="john@example.com" class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+${indent}      <input type="email" placeholder="john@example.com" class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-violet-500">
 ${indent}    </div>` : '';
       const messageField = p.showMessageField ? `\n${indent}    <div>
 ${indent}      <label class="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Message</label>
-${indent}      <textarea rows="3" placeholder="Tell us how we can help..." class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"></textarea>
+${indent}      <textarea rows="3" placeholder="Tell us how we can help..." class="w-full px-3 py-2 text-sm rounded border border-zinc-800 bg-zinc-900/50 text-white focus:outline-none focus:ring-1 focus:ring-violet-500"></textarea>
 ${indent}    </div>` : '';
 
       return `${indent}<form class="${allStyleClasses} w-full max-w-md flex flex-col gap-4" onsubmit="event.preventDefault()"${inlineStyleAttr}>
 ${indent}  <h3 class="text-lg font-bold border-b border-zinc-800 pb-2 mb-2">${p.formTitle || 'Subscribe Now'}</h3>${nameField}${emailField}${messageField}
-${indent}  <button type="submit" class="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold rounded bg-indigo-650 text-white hover:bg-indigo-700 transition-colors mt-2">
+${indent}  <button type="submit" class="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold rounded bg-violet-650 text-white hover:bg-violet-750 transition-colors mt-2">
 ${indent}    ${p.buttonText || 'Submit Form'}
 ${indent}  </button>
 ${indent}</form>`;
@@ -186,6 +186,17 @@ ${indent}  data-interactive="${interactive}">
 ${indent}</div>`;
     }
 
+    case 'Container': {
+      const childrenHtml = (component.children || []).map(child => 
+        generateComponentHtml(child, indentLevel + 1, false)
+      ).join('\n');
+      return `${indent}<div class="${allStyleClasses} w-full min-h-[100px]"${inlineStyleAttr}>\n${childrenHtml}\n${indent}</div>`;
+    }
+
+    case 'Breaker': {
+      return `${indent}<div class="w-full flex items-center justify-center py-2">\n${indent}  <div class="w-full ${allStyleClasses}"${inlineStyleAttr}></div>\n${indent}</div>`;
+    }
+
     default:
       return '';
   }
@@ -238,29 +249,49 @@ export function wrapRawHtmlInTemplate(bodyHtml: string, pageSettings?: PageSetti
     ? `    body { cursor: url(${customCursorUrl}) 16 16, auto; }\n`
     : '';
 
+  const artboardBg = pageSettings?.customBgColor || '#0c0a09';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DevCanvas Standalone Design</title>
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Google Fonts Inter -->
+  
+  <!-- Tailwind CSS v4 CDN -->
+  <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+  
+  <!-- Custom Design System Tokens config -->
+  <style type="text/tailwindcss">
+    @theme {
+      --color-zinc-955: #0a0a0a;
+      --color-zinc-950: #0a0a0a;
+      --color-indigo-500: #6366f1;
+    }
+  </style>
+
+  <!-- Google Fonts Connection -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome for fallback icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
   <style>
     body {
       font-family: 'Inter', sans-serif;
-      background-color: #0c0a09; /* stone-950 */
+      background-color: ${artboardBg};
+      color: white;
       overflow-x: hidden;
+      margin: 0;
+      min-height: 100vh;
     }
 ${animatedBgStyle}
 ${cursorStyle}
   </style>${threeScripts}
 </head>
-<body class="text-zinc-100 min-h-screen relative">
+<body class="min-h-screen relative">
 
   <!-- Background Layer -->
   ${bgPreset === 'animated-gradient' ? `
@@ -270,7 +301,7 @@ ${cursorStyle}
   ` : ''}
 
   <!-- Canvas elements container -->
-  <div class="relative w-full h-screen p-8">
+  <div id="devcanvas-root" class="relative w-full h-screen p-8">
 ${bodyHtml}
   </div>
 
@@ -530,8 +561,44 @@ ${bodyHtml}
 }
 
 export function generateFullHtml(components: CanvasComponent[], pageSettings?: PageSettings): string {
-  const bodyHtml = components.map(c => generateComponentHtml(c, 2)).join('\n\n');
-  return wrapRawHtmlInTemplate(bodyHtml, pageSettings);
+  const bodyContent = components.map(c => generateComponentHtml(c, 2)).join('\n');
+  const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DevCanvas Export</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    
+    <style type="text/tailwindcss">
+        @theme {
+            --color-zinc-955: #0a0a0a;
+            --color-zinc-950: #0a0a0a;
+            --color-indigo-500: #6366f1;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0a0a0a;
+            color: #f4f4f5;
+            min-height: 100vh;
+            margin: 0;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body class="antialiased bg-zinc-955 text-zinc-100">
+    <div id="devcanvas-root" class="w-full h-full min-h-screen">
+        ${bodyContent}
+    </div>
+</body>
+</html>`;
+
+  return fullHtml;
 }
 
 function escapeHtml(text: string): string {

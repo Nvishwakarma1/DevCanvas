@@ -1,4 +1,4 @@
-export type ComponentType = 'Header' | 'Card' | 'Button' | 'InputForm' | 'Grid' | 'ThreeDAsset' | 'Section' | 'Navbar' | 'Footer';
+export type ComponentType = 'Header' | 'Card' | 'Button' | 'InputForm' | 'Grid' | 'ThreeDAsset' | 'Section' | 'Navbar' | 'Footer' | 'Container' | 'Breaker';
 
 export interface ComponentProps {
   // Spacing (Tailwind classes or pure names mapping to values)
@@ -61,6 +61,24 @@ export interface ComponentProps {
   modelScale?: number;
   modelAutoRotate?: boolean;
   modelInteractive?: boolean;
+
+  // Phase 2.1 — Interactive 3D Logic Bindings
+  model3DBindings?: {
+    scrollToRotateY?: boolean;
+    mouseToRotateX?: boolean;
+    mouseToScale?: boolean;
+    scrollToPositionZ?: boolean;
+  };
+}
+
+// Phase 2.2 — Visual Logic Node event→action binding
+export interface LogicBinding {
+  id: string;
+  event: 'onClick' | 'onHover' | 'onScroll';
+  action: 'toggleVisibility' | 'triggerParticles' | 'scrollTo' | 'addClass' | 'removeClass';
+  targetId?: string;
+  /** Optional CSS class to add/remove for addClass/removeClass action */
+  cssClass?: string;
 }
 
 export interface CanvasComponent {
@@ -68,14 +86,27 @@ export interface CanvasComponent {
   type: ComponentType;
   props: ComponentProps;
   children?: CanvasComponent[];
+  /** Phase 1.4 — Fluid Layout Mode: 'freeform' uses absolute pos, 'flow' uses relative/document flow */
+  layoutMode?: 'freeform' | 'flow';
+  /** Phase 2.2 — Visual Logic Nodes: event→action bindings for this component */
+  logicBindings?: LogicBinding[];
 }
 
 export type ViewType = 'landing' | 'ide';
 export type BreakpointType = 'desktop' | 'tablet' | 'mobile';
 
 export interface PageSettings {
-  bgPreset: 'none' | 'particles' | 'animated-gradient' | 'mouse-trail';
+  bgPreset: 'none' | 'particles' | 'animated-gradient' | 'mouse-trail' | 'aurora-webgl';
   cursorPreset: 'default' | 'neon-crosshair' | 'glowing-circle' | 'custom';
   customCursorUrl: string;
+  webglTextureUrl?: string;
+  webglBlendMode?: 'none' | 'multiply' | 'screen' | 'overlay';
+  webglColorA?: string;
+  webglColorB?: string;
+  webglDisplacement?: number;
+  webglSpeed?: number;
+  /** Custom background color overlay for the Artboard */
+  customBgColor?: string;
+  /** Phase 2.4 — GLSL Shader Editor: custom fragment shader source */
+  customGlslFragment?: string;
 }
-

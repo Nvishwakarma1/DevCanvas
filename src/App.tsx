@@ -3,7 +3,14 @@ import {
   ArrowLeft, 
   Download,
   ExternalLink,
-  Layers
+  Layers,
+  Zap,
+  GitBranch,
+  Box,
+  RotateCcw,
+  Check,
+  Copy,
+  Trash2
 } from 'lucide-react';
 import logoImg from './assets/DClogo.png';
 import LandingPage from './components/LandingPage';
@@ -12,16 +19,18 @@ import VisualCanvas from './components/VisualCanvas';
 import CodeEditor from './components/CodeEditor';
 import LivePreview from './components/LivePreview';
 import PropertyInspector from './components/PropertyInspector';
-import type { CanvasComponent, ComponentType, ComponentProps, BreakpointType, ViewType, PageSettings } from './types/canvas';
+import LogicPanel from './components/LogicPanel';
+import GitHubPanel from './components/GitHubPanel';
+import type { CanvasComponent, ComponentType, ComponentProps, BreakpointType, ViewType, PageSettings, LogicBinding } from './types/canvas';
 import { generateComponentHtml, generateFullHtml, parseHtmlToComponents, wrapRawHtmlInTemplate } from './utils/codeGenerator';
+import { generateReactProject } from './utils/projectExporter';
+import { useDebouncedValue } from './hooks/useDebouncedValue';
 
 import ContextMenu from './components/ContextMenu';
 
-// Check if this window is running as a detached visual canvas or live preview tab
 const isCanvasMode = typeof window !== 'undefined' && window.location.search.includes('mode=canvas');
 const isPreviewMode = typeof window !== 'undefined' && window.location.search.includes('mode=preview');
 
-// Default initial values helper for newly added components
 const createDefaultProps = (type: ComponentType): ComponentProps => {
   const common = {
     paddingY: 'py-6',
@@ -87,7 +96,7 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         buttonText: 'Click Action',
         buttonVariant: 'solid',
         textAlign: 'text-center',
-        bgColor: 'bg-indigo-600',
+        bgColor: 'bg-violet-600',
         borderRadius: 'rounded-md',
         borderWidth: 'border-0',
         top: 240,
@@ -166,7 +175,7 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         ...common,
         paddingY: 'py-4',
         paddingX: 'px-6',
-        bgColor: 'bg-zinc-950',
+        bgColor: 'bg-zinc-955',
         logoText: 'BrandLogo',
         links: ['Home', 'About', 'Services', 'Contact'],
         buttonText: 'Sign Up',
@@ -184,7 +193,7 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         ...common,
         paddingY: 'py-12',
         paddingX: 'px-8',
-        bgColor: 'bg-zinc-950',
+        bgColor: 'bg-zinc-955',
         logoText: 'BrandLogo',
         description: 'Building amazing experiences on the web.',
         copyrightText: '© 2026 DevCanvas. All rights reserved.',
@@ -198,12 +207,39 @@ const createDefaultProps = (type: ComponentType): ComponentProps => {
         width: '100%',
         height: 'auto'
       };
+    case 'Container':
+      return {
+        ...common,
+        paddingY: 'py-8',
+        paddingX: 'px-8',
+        bgColor: 'bg-zinc-900',
+        borderRadius: 'rounded-xl',
+        borderWidth: 'border',
+        borderColor: 'border-zinc-850',
+        top: 200,
+        left: 200,
+        width: '400px',
+        height: '250px'
+      };
+    case 'Breaker':
+      return {
+        ...common,
+        paddingY: 'py-0',
+        paddingX: 'px-0',
+        bgColor: 'bg-transparent',
+        borderRadius: 'rounded-none',
+        borderWidth: 'border-b',
+        borderColor: 'border-zinc-800',
+        top: 450,
+        left: 0,
+        width: '100%',
+        height: '2px'
+      };
     default:
       return common;
   }
 };
 
-// PRESET TEMPLATES
 const loadPresetTemplate = (name: string): CanvasComponent[] => {
   const rootId = () => Math.random().toString(36).substr(2, 9);
   
@@ -339,13 +375,20 @@ export default function App() {
   const [pageSettings, setPageSettings] = useState<PageSettings>({
     bgPreset: 'none',
     cursorPreset: 'default',
-    customCursorUrl: ''
+    customCursorUrl: '',
+    webglTextureUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
+    webglBlendMode: 'overlay',
+    webglColorA: '#7c3aed', // Etherium Purple
+    webglColorB: '#f59e0b', // Solar Core
+    webglDisplacement: 0.15,
+    webglSpeed: 1.0
   });
 
-  // Layout Toggles
-  const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState<boolean>(true);
-  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState<boolean>(true);
-  const [isCodePaneOpen, setIsCodePaneOpen] = useState<boolean>(true);
+  // Layout Toggles & Unified Sidebar State
+  const [activeSidebarTab, setActiveSidebarTab] = useState<'components' | 'properties' | 'code' | 'preview' | 'console'>('components');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isLogicSidebarOpen, setIsLogicSidebarOpen] = useState<boolean>(false);
+  const [isGitHubModalOpen, setIsGitHubModalOpen] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
   
   // Console state
@@ -355,6 +398,32 @@ export default function App() {
   // Manual code editing states
   const [isManualCodeEditing, setIsManualCodeEditing] = useState<boolean>(false);
   const [manualCode, setManualCode] = useState<string>('');
+
+  // Phase 3.5 — Contextual background dimming state: true when active drag/selecting
+  const [isUserActive, setIsUserActive] = useState<boolean>(false);
+
+  // Set user activity state dynamically based on user focus/mouse movements
+  useEffect(() => {
+    let timeout: any;
+    const handleActive = () => {
+      setIsUserActive(true);
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setIsUserActive(false);
+      }, 3000); // Renders 100% full background after 3s of inactivity
+    };
+
+    window.addEventListener('mousemove', handleActive);
+    window.addEventListener('mousedown', handleActive);
+    window.addEventListener('keydown', handleActive);
+
+    return () => {
+      window.removeEventListener('mousemove', handleActive);
+      window.removeEventListener('mousedown', handleActive);
+      window.removeEventListener('keydown', handleActive);
+      clearTimeout(timeout);
+    };
+  }, []);
 
   // Load default landing/portfolio page components once loaded
   useEffect(() => {
@@ -423,7 +492,6 @@ export default function App() {
     setSelectedId(newComp.id);
   };
 
-  // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -466,13 +534,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Global Context Menu Right Click
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
-      // Don't show context menu on landing page, in preview, or during manual code edit
       if (view !== 'ide' || isManualCodeEditing || isPreviewMode) return;
       
-      // Also exclude text inputs/textareas from custom context menu
       if (
         e.target instanceof HTMLInputElement || 
         e.target instanceof HTMLTextAreaElement ||
@@ -500,7 +565,6 @@ export default function App() {
     }
   };
 
-  // Sync state selectors
   const getSelectedComponent = (targetId: string | null = selectedId, list: CanvasComponent[] = components): CanvasComponent | null => {
     if (!targetId) return null;
     
@@ -517,18 +581,17 @@ export default function App() {
     return search(list);
   };
 
-  // Add Component (Appends to target container or root list)
   const addComponent = (type: ComponentType, parentId?: string) => {
     saveHistory(componentsRef.current);
     const newComp: CanvasComponent = {
       id: `${type.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`,
       type,
       props: createDefaultProps(type),
-      children: type === 'Grid' ? [] : undefined
+      children: type === 'Grid' ? [] : undefined,
+      layoutMode: 'freeform' // Default layout sizing
     };
 
     if (parentId) {
-      // Nest within grid container
       const recursiveAdd = (list: CanvasComponent[]): CanvasComponent[] => {
         return list.map((item) => {
           if (item.id === parentId) {
@@ -548,14 +611,12 @@ export default function App() {
       };
       setComponents(recursiveAdd(components));
     } else {
-      // Append to top level root list
       setComponents([...components, newComp]);
     }
     
     setSelectedId(newComp.id);
   };
 
-  // Update properties on styling inspector changes
   const updateComponentProps = (id: string, newProps: Partial<ComponentProps>) => {
     if (isCanvasMode) {
       const channel = new BroadcastChannel('devcanvas-sync');
@@ -582,7 +643,56 @@ export default function App() {
     setComponents(recursiveUpdate(components));
   };
 
-  // Update Page Settings and broadcast to other tabs
+  // Phase 1.4 — Fluid Layout modes setting mutation
+  const updateComponentLayoutMode = (id: string, mode: 'freeform' | 'flow') => {
+    const recursiveLayoutUpdate = (list: CanvasComponent[]): CanvasComponent[] => {
+      return list.map((item) => {
+        if (item.id === id) {
+          return {
+            ...item,
+            layoutMode: mode,
+            // If locking into relative flow mode, clear standard pixel position offsets
+            props: {
+              ...item.props,
+              top: mode === 'flow' ? undefined : 120,
+              left: mode === 'flow' ? undefined : 100,
+            }
+          };
+        }
+        if (item.children) {
+          return {
+            ...item,
+            children: recursiveLayoutUpdate(item.children)
+          };
+        }
+        return item;
+      });
+    };
+    setComponents(recursiveLayoutUpdate(components));
+  };
+
+  // Phase 2.2 — Logic node event wiring bindings update
+  const updateComponentLogic = (id: string, bindings: LogicBinding[]) => {
+    const recursiveLogicUpdate = (list: CanvasComponent[]): CanvasComponent[] => {
+      return list.map((item) => {
+        if (item.id === id) {
+          return {
+            ...item,
+            logicBindings: bindings
+          };
+        }
+        if (item.children) {
+          return {
+            ...item,
+            children: recursiveLogicUpdate(item.children)
+          };
+        }
+        return item;
+      });
+    };
+    setComponents(recursiveLogicUpdate(components));
+  };
+
   const updatePageSettings = (newSettings: Partial<PageSettings>) => {
     if (isCanvasMode) {
       const channel = new BroadcastChannel('devcanvas-sync');
@@ -592,7 +702,6 @@ export default function App() {
     setPageSettings(prev => ({ ...prev, ...newSettings }));
   };
 
-  // Delete component and reset selection if target is deleted
   const deleteComponent = (id: string) => {
     const recursiveDelete = (list: CanvasComponent[]): CanvasComponent[] => {
       return list
@@ -613,7 +722,6 @@ export default function App() {
     }
   };
 
-  // Duplicate target component (deep clones component tree)
   const duplicateComponent = (id: string) => {
     saveHistory(componentsRef.current);
     const recursiveDuplicate = (list: CanvasComponent[]): CanvasComponent[] => {
@@ -621,7 +729,6 @@ export default function App() {
       for (const item of list) {
         if (item.id === id) {
           result.push(item);
-          // Deep copy
           const copy: CanvasComponent = JSON.parse(JSON.stringify(item));
           copy.id = `${item.type.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`;
           if (copy.children) {
@@ -647,7 +754,6 @@ export default function App() {
     setComponents(recursiveDuplicate(components));
   };
 
-  // Move component up or down within sibling arrays
   const moveComponent = (id: string, direction: 'up' | 'down') => {
     const recursiveMove = (list: CanvasComponent[]): { newList: CanvasComponent[]; moved: boolean } => {
       const idx = list.findIndex(c => c.id === id);
@@ -686,13 +792,16 @@ export default function App() {
     setComponents(recursiveMove(components).newList);
   };
 
-  // Generate HTML for editor, full HTML for Iframe sandbox
   const generatedCode = components.map(c => generateComponentHtml(c, 0)).join('\n\n');
+  
+  // Phase 1.1 — Debounced generation for live preview iframe sandbox (Wait 150ms of drag inactivity)
+  const debouncedComponents = useDebouncedValue(components, 150);
+  const debouncedPageSettings = useDebouncedValue(pageSettings, 150);
+
   const sandboxHtml = isManualCodeEditing
     ? wrapRawHtmlInTemplate(manualCode, pageSettings)
-    : generateFullHtml(components, pageSettings);
+    : generateFullHtml(debouncedComponents, debouncedPageSettings);
 
-  // Keep state reference up-to-date for BroadcastChannel single-event listeners
   const stateRef = useRef({ 
     components, 
     selectedId, 
@@ -722,12 +831,10 @@ export default function App() {
     };
   });
 
-  // Cross-tab Synchronization using BroadcastChannel
   useEffect(() => {
     const channel = new BroadcastChannel('devcanvas-sync');
 
     if (isCanvasMode) {
-      // Detached canvas sends a signal that it is open and needs the initial state
       channel.postMessage({ type: 'REQUEST_INIT_STATE' });
       channel.postMessage({ type: 'CANVAS_MOUNTED' });
 
@@ -756,14 +863,12 @@ export default function App() {
         handleUnload();
       };
     } else if (isPreviewMode) {
-      // Detached preview window sends a signal and waits for HTML updates
       channel.postMessage({ type: 'REQUEST_INIT_PREVIEW' });
       channel.postMessage({ type: 'PREVIEW_MOUNTED' });
 
       channel.onmessage = (event) => {
         const { type, payload } = event.data;
         if (type === 'SYNC_PREVIEW_HTML') {
-          // Update local document source state
           const iframe = document.getElementById('detached-preview-frame') as HTMLIFrameElement;
           if (iframe) iframe.setAttribute('srcdoc', payload);
         } else if (type === 'CLOSE_PREVIEW') {
@@ -782,7 +887,6 @@ export default function App() {
         handleUnload();
       };
     } else {
-      // Main window listens to actions from canvas tab or mounts from preview tab
       channel.onmessage = (event) => {
         const { type, payload } = event.data;
         if (type === 'REQUEST_INIT_STATE') {
@@ -836,7 +940,6 @@ export default function App() {
     }
   }, []);
 
-  // Main window broadcasts changes to detached windows when state changes
   useEffect(() => {
     if (!isCanvasMode && !isPreviewMode) {
       const channel = new BroadcastChannel('devcanvas-sync');
@@ -852,7 +955,6 @@ export default function App() {
     }
   }, [components, selectedId, breakpoint, pageSettings, sandboxHtml]);
 
-  // Action Dispatcher for Canvas (handles both normal and detached windows)
   const handleCanvasSelect = (id: string | null) => {
     if (isCanvasMode) {
       const channel = new BroadcastChannel('devcanvas-sync');
@@ -915,7 +1017,6 @@ export default function App() {
     }
   };
 
-  // Detach / Dock controls
   const detachCanvas = () => {
     setIsDetached(true);
     window.open(
@@ -948,7 +1049,6 @@ export default function App() {
     setIsPreviewDetached(false);
   };
 
-  // Run Compiler & Debug logs
   const handleRunDebugger = () => {
     setIsConsoleOpen(true);
     setConsoleLogs([
@@ -961,9 +1061,8 @@ export default function App() {
     ]);
   };
 
-  // Export full standalone index.html
   const handleExportCode = () => {
-    const fullHtml = generateFullHtml(components);
+    const fullHtml = generateFullHtml(components, pageSettings);
     const blob = new Blob([fullHtml], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -975,7 +1074,18 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
-  // Sync edited manual HTML code back to canvas components data tree
+  // Phase 1.2 — Handle Vite/React Project Exporter ZIP download
+  const handleExportReactProject = async () => {
+    try {
+      setConsoleLogs(prev => [...prev, `[info] Generating React/Vite project bundle with JSZip...`]);
+      setIsConsoleOpen(true);
+      await generateReactProject(components, pageSettings);
+      setConsoleLogs(prev => [...prev, `[success] React/Vite project zip exported successfully! Creator: VoxelVolt.`]);
+    } catch (err: any) {
+      setConsoleLogs(prev => [...prev, `[error] Failed to export React project: ${err.message}`]);
+    }
+  };
+
   const handleSyncToCanvas = () => {
     try {
       const parsed = parseHtmlToComponents(manualCode);
@@ -1004,7 +1114,6 @@ export default function App() {
     }
   };
 
-  // Discard manual edits and reset to visual canvas components state
   const handleDiscardChanges = () => {
     const freshGenerated = components.map(c => generateComponentHtml(c, 0)).join('\n\n');
     setManualCode(freshGenerated);
@@ -1015,7 +1124,6 @@ export default function App() {
     ]);
   };
 
-  // Template select trigger
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const tName = e.target.value;
     setActiveTemplate(tName);
@@ -1028,12 +1136,10 @@ export default function App() {
     }
   };
 
-  // DETACHED PREVIEW MODE RENDER
   if (isPreviewMode) {
     return (
-      <div className="h-screen bg-zinc-950 text-zinc-100 overflow-hidden flex flex-col font-sans select-none">
-        {/* Top Mini Header */}
-        <div className="h-10 bg-zinc-900 border-b border-zinc-800 px-4 flex items-center justify-between text-xs text-zinc-400 select-none flex-shrink-0">
+      <div className="h-screen bg-zinc-955 text-zinc-100 overflow-hidden flex flex-col font-sans select-none">
+        <div className="h-10 bg-zinc-900 border-b border-zinc-800 px-4 flex items-center justify-between text-xs text-zinc-405 select-none flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-semibold text-white">DevCanvas Detached Live Preview</span>
@@ -1041,7 +1147,6 @@ export default function App() {
           <span className="text-[10px] text-zinc-500 font-mono">Syncing sandbox active</span>
         </div>
 
-        {/* Dynamic Iframe Container */}
         <div className="flex-1 bg-zinc-950 relative min-h-0">
           <iframe
             id="detached-preview-frame"
@@ -1054,20 +1159,17 @@ export default function App() {
     );
   }
 
-  // DETACHED CANVAS VIEW RENDER
   if (isCanvasMode) {
     return (
-      <div className="h-screen bg-zinc-950 text-zinc-100 overflow-hidden flex flex-col font-sans">
-        {/* Top Mini Header */}
+      <div className="h-screen bg-zinc-955 text-zinc-100 overflow-hidden flex flex-col font-sans">
         <div className="h-10 bg-zinc-900 border-b border-zinc-800 px-4 flex items-center justify-between text-xs text-zinc-400 select-none flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+            <span className="h-2 w-2 rounded-full bg-violet-500 animate-pulse" />
             <span className="font-semibold text-white">DevCanvas Detached Workspace</span>
           </div>
           <span className="text-[10px] text-zinc-500 font-mono">Real-time sync active</span>
         </div>
 
-        {/* Visual Canvas Panel */}
         <VisualCanvas
           components={components}
           selectedId={selectedId}
@@ -1090,286 +1192,272 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#181818] text-zinc-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
       
-      {/* SIMPLIFIED IDE HEADER (No bloated menus, activity bars, or mock window controls) */}
-      <header className="h-14 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-6 flex-shrink-0 z-10 shadow-md select-none">
+      {/* HEADER PANEL - h-14, full width, deep dark background */}
+      <header className="h-14 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6 flex-shrink-0 z-20 select-none">
         
-        {/* Left: Exit, Logo, Search */}
+        {/* Left: Brand logo & project status info */}
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => setView('landing')}
-            className="flex items-center gap-1.5 text-xs font-semibold text-zinc-400 hover:text-white transition-colors cursor-pointer group"
-            title="Exit to Landing Page"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span>Exit</span>
-          </button>
-          
-          <div className="h-4 w-px bg-zinc-850" />
-          
-          <div className="flex items-center gap-2">
-            <img src={logoImg} className="w-6 h-6 rounded object-contain shadow shadow-indigo-500/20" alt="DevCanvas Logo" />
-            <span className="font-bold text-sm tracking-tight text-white">DevCanvas</span>
+          <div className="flex items-center gap-2 select-none cursor-pointer" onClick={() => setView('landing')}>
+            <img src={logoImg} alt="DClogo" className="h-6 w-auto" />
+            <span className="font-bold text-sm tracking-tight text-white">DevCanvas Studio</span>
           </div>
-
-          <div className="h-4 w-px bg-zinc-850" />
-
-          {/* Component Explorer Search */}
-          <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1 text-zinc-400 gap-1.5 w-44 lg:w-52 hover:border-zinc-700 transition-colors">
-            <svg className="w-3 h-3 text-zinc-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <input
-              type="text"
-              placeholder="Search components..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-transparent border-none text-zinc-200 focus:outline-none text-[10px] w-full placeholder-zinc-650"
-            />
+          <div className="w-px h-5 bg-zinc-800" />
+          <div className="flex items-center gap-2 px-2.5 py-1 rounded hover:bg-zinc-900 transition-colors cursor-pointer">
+            <span className="font-medium text-xs tracking-tight text-zinc-300">Untitled Project</span>
+            <div className="w-[14px] h-[14px] rounded-full bg-zinc-800 flex items-center justify-center">
+              <svg className="w-2 h-2 text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            </div>
           </div>
         </div>
 
-        {/* Center: Layout Toggles */}
-        <div className="flex items-center bg-zinc-950 border border-zinc-800 rounded-lg p-0.5 gap-0.5 text-xs text-zinc-500">
-          <button
-            onClick={() => setIsLeftSidebarOpen(!isLeftSidebarOpen)}
-            className={`px-3 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer ${isLeftSidebarOpen ? 'bg-zinc-800 text-white shadow-sm font-bold' : 'hover:text-zinc-350'}`}
-            title="Toggle Component Explorer Sidebar"
-          >
-            Explorer
-          </button>
-          <button
-            onClick={() => setIsCodePaneOpen(!isCodePaneOpen)}
-            className={`px-3 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer ${isCodePaneOpen ? 'bg-zinc-800 text-white shadow-sm font-bold' : 'hover:text-zinc-350'}`}
-            title="Toggle Code & Preview Editor Panel"
-          >
-            Code Panel
-          </button>
-          <button
-            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
-            className={`px-3 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer ${isRightSidebarOpen ? 'bg-zinc-800 text-white shadow-sm font-bold' : 'hover:text-zinc-350'}`}
-            title="Toggle CSS Properties Sidebar"
-          >
-            Inspector
-          </button>
-          <button
-            onClick={() => {
-              setIsConsoleOpen(!isConsoleOpen);
-              if (!isConsoleOpen && consoleLogs.length === 0) {
-                handleRunDebugger();
-              }
-            }}
-            className={`px-3 py-1 text-[11px] font-semibold rounded transition-all cursor-pointer ${isConsoleOpen ? 'bg-zinc-800 text-white shadow-sm font-bold' : 'hover:text-zinc-350'}`}
-            title="Toggle Debug Console Drawer"
-          >
-            Console
-          </button>
+        {/* Center: Tools Toolbar styled as a pill */}
+        <div className="flex items-center bg-zinc-800/50 backdrop-blur rounded-full p-1 border border-zinc-800/80 shadow-sm gap-1.5 px-3">
+           <button 
+             onClick={handleUndo} 
+             disabled={past.length === 0}
+             className="w-8 h-8 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+             title="Undo (Ctrl+Z)"
+           >
+             <RotateCcw className="w-3.5 h-3.5" />
+           </button>
+           <button 
+             onClick={handleRedo} 
+             disabled={future.length === 0}
+             className="w-8 h-8 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+             title="Redo (Ctrl+Y)"
+           >
+             <Check className="w-3.5 h-3.5 rotate-90" />
+           </button>
+           <button 
+             onClick={handleCopy} 
+             disabled={!selectedId}
+             className="w-8 h-8 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+             title="Copy (Ctrl+C)"
+           >
+             <Copy className="w-3.5 h-3.5" />
+           </button>
+           <button 
+             onClick={handlePaste} 
+             disabled={!clipboard}
+             className="w-8 h-8 rounded-full hover:bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+             title="Paste (Ctrl+V)"
+           >
+             <Download className="w-3.5 h-3.5 rotate-180" />
+           </button>
+           <button 
+             onClick={() => selectedId && deleteComponent(selectedId)} 
+             disabled={!selectedId}
+             className="w-8 h-8 rounded-full hover:bg-rose-950/30 text-zinc-400 hover:text-rose-400 flex items-center justify-center transition-colors disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+             title="Delete"
+           >
+             <Trash2 className="w-3.5 h-3.5" />
+           </button>
         </div>
 
-        {/* Right: Presets, Detach Canvas/Preview, Export */}
+        {/* Right: GitHub integration, Zoom, compile, export buttons */}
         <div className="flex items-center gap-3">
-          {/* Preset Selector */}
-          <div className="flex items-center gap-1.5 bg-zinc-950 px-2.5 py-1 rounded border border-zinc-800 text-xs">
-            <span className="text-zinc-550 font-semibold uppercase text-[8px] tracking-wider">Template:</span>
-            <select
-              value={activeTemplate}
-              onChange={handleTemplateChange}
-              className="bg-transparent text-zinc-300 font-medium outline-none pr-3 cursor-pointer"
-            >
-              <option value="portfolio">Landing Showcase</option>
-              <option value="contact">Simple Contact Form</option>
-              <option value="clear">Reset/Empty Canvas</option>
-            </select>
-          </div>
-
-          {/* Detach Canvas */}
-          {isDetached ? (
-            <button
-              onClick={reDockCanvas}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-indigo-400 hover:text-indigo-300 text-xs font-bold transition-all cursor-pointer"
-              title="Dock Canvas Back"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Dock Canvas</span>
-            </button>
-          ) : (
-            <button
-              onClick={detachCanvas}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-350 hover:text-white text-xs font-bold transition-all cursor-pointer"
-              title="Detach Canvas to a new window"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Detach Canvas</span>
-            </button>
-          )}
-
-          {/* Detach Preview */}
-          {isPreviewDetached ? (
-            <button
-              onClick={reDockPreview}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-indigo-400 hover:text-indigo-300 text-xs font-bold transition-all cursor-pointer"
-              title="Dock Preview Back"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Dock Preview</span>
-            </button>
-          ) : (
-            <button
-              onClick={detachPreview}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 text-zinc-350 hover:text-white text-xs font-bold transition-all cursor-pointer"
-              title="Detach Preview to a new window"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span className="hidden lg:inline">Detach Preview</span>
-            </button>
-          )}
-
-          {/* Export Layout */}
+          {/* GitHub connector */}
           <button
-            onClick={handleExportCode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-bold border border-indigo-500 transition-all cursor-pointer shadow-md"
-            title="Download full layout as single HTML file"
+            onClick={() => setIsGitHubModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 h-8 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
+            title="GitHub Commit Link"
           >
-            <Download className="w-3.5 h-3.5" />
+            <GitBranch className="w-3.5 h-3.5 text-zinc-400" />
+            <span>GitHub</span>
+          </button>
+
+          {/* Quick Play Trigger */}
+          <button 
+            onClick={handleRunDebugger} 
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700 transition-all cursor-pointer"
+            title="Run Sandbox Code Compiler"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </button>
+
+          {/* Prominent Export Button - deep indigo with download icon */}
+          <button 
+            onClick={handleExportCode} 
+            className="flex items-center gap-1.5 px-4 py-1.5 h-9 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all border border-indigo-500 hover:border-indigo-400 shadow-sm cursor-pointer shadow-indigo-600/20"
+          >
+            <Download className="w-4 h-4" />
             <span>Export</span>
           </button>
         </div>
       </header>
 
-      {/* Main Workspace splits layout */}
-      <div className="flex-1 flex min-h-0 relative">
+      {/* Main Workspace layout split */}
+      <div className="flex-1 flex min-h-0 relative bg-zinc-950">
         
-        {/* Left Component Library (collapsible) */}
-        {isLeftSidebarOpen && (
-          <ComponentLibrary 
-            onAddComponent={(type) => addComponent(type)}
-            filterText={searchTerm}
-          />
-        )}
+        {/* Pane 1 (Leftmost Nav): Thin Icon Navigation Bar (w-14, flex column) */}
+        <div className="w-14 bg-zinc-950 border-r border-zinc-800 flex flex-col items-center py-4 gap-4 z-10 flex-shrink-0 select-none">
+           {/* Tab Switchers: Components, Properties, Code, Preview, Console */}
+           {[
+             { id: 'components' as const, label: 'Components', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/></svg> },
+             { id: 'properties' as const, label: 'Properties', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="15" y1="3" x2="15" y2="21"/></svg> },
+             { id: 'code' as const, label: 'Code Editor', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> },
+             { id: 'preview' as const, label: 'Live Preview', icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg> },
+             { id: 'console' as const, label: 'Terminal Console', icon: <Zap className="w-4 h-4" /> }
+           ].map((tab) => (
+             <button
+               key={tab.id}
+               onClick={() => {
+                 setActiveSidebarTab(tab.id);
+                 setIsSidebarCollapsed(false);
+               }}
+               className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all cursor-pointer ${
+                 activeSidebarTab === tab.id && !isSidebarCollapsed
+                   ? 'bg-zinc-800 text-white border border-zinc-700'
+                   : 'text-zinc-500 hover:text-zinc-350'
+               }`}
+               title={tab.label}
+             >
+               {tab.icon}
+             </button>
+           ))}
 
-        {/* Center Panel (Visual Canvas + Collapsible Console) */}
-        <div className="flex-1 flex flex-col h-full min-h-0">
-          
-          <div className="flex-1 relative min-h-0 flex flex-col">
-            {isDetached ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-zinc-950 grid-bg-dark border-r border-zinc-900 select-none">
-                <div className="w-16 h-16 rounded-2xl bg-indigo-650/10 border border-indigo-500/20 flex items-center justify-center text-indigo-405 mb-6 animate-pulse">
-                  <ExternalLink className="w-8 h-8" />
-                </div>
-                <h3 className="text-base font-bold text-white">Visual Canvas is Detached</h3>
-                <p className="text-xs text-zinc-400 mt-2 max-w-[340px] leading-relaxed">
-                  The Visual Designer Canvas is active in a separate browser tab. Real-time updates and properties synchronization are working.
-                </p>
-                <div className="flex gap-3 mt-8">
-                  <button
-                    onClick={reDockCanvas}
-                    className="px-5 py-2 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
-                  >
-                    Re-dock Canvas Here
-                  </button>
-                  <button
-                    onClick={detachCanvas}
-                    className="px-5 py-2 rounded-lg text-xs font-bold bg-zinc-900 hover:bg-zinc-800 border border-zinc-805 text-zinc-400 hover:text-white transition-all cursor-pointer"
-                  >
-                    Refocus Detached Tab
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <VisualCanvas
-                components={components}
-                selectedId={selectedId}
-                breakpoint={breakpoint}
-                onSelectComponent={handleCanvasSelect}
-                onDeleteComponent={handleCanvasDelete}
-                onDuplicateComponent={handleCanvasDuplicate}
-                onMoveComponent={handleCanvasMove}
-                onDropComponent={handleCanvasDrop}
-                onChangeBreakpoint={handleCanvasBreakpoint}
-                pageSettings={pageSettings}
-                onUpdateComponentProps={updateComponentProps}
+           <div className="w-8 h-px bg-zinc-800 my-1"></div>
+
+           {/* Detached Toggler */}
+           <button 
+             onClick={detachCanvas} 
+             className="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-550 hover:text-zinc-300 transition-colors cursor-pointer" 
+             title="Detach Visual Canvas View"
+           >
+             <ExternalLink className="w-4 h-4" />
+           </button>
+
+           {/* Collapse Sidebar Button */}
+           <button
+             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+             className="mt-auto w-9 h-9 flex items-center justify-center rounded-lg text-zinc-550 hover:text-zinc-300 transition-colors cursor-pointer"
+             title={isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+           >
+             <svg className={`w-4 h-4 transition-transform ${isSidebarCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+           </button>
+        </div>
+        
+        {/* Pane 2 (Active Sidebar): w-80, bg-zinc-900/50 backdrop-blur */}
+        {!isSidebarCollapsed && (
+          <div className="w-80 bg-zinc-900/80 backdrop-blur-md border-r border-zinc-800 flex flex-col h-full min-h-0 flex-shrink-0 z-10">
+            {activeSidebarTab === 'components' && (
+              <ComponentLibrary 
+                onAddComponent={(type) => addComponent(type)}
+                filterText={searchTerm}
               />
             )}
-          </div>
-
-          {/* Console Drawer (collapsible output block) */}
-          {isConsoleOpen && (
-            <div className="h-48 bg-zinc-900 border-t border-zinc-800 flex flex-col flex-shrink-0 font-mono text-[11px] text-zinc-400">
-              <div className="h-8 bg-zinc-950 border-b border-zinc-900/60 px-4 flex items-center justify-between select-none">
-                <span className="font-semibold text-white">Terminal Console Output</span>
-                <button
-                  onClick={() => setIsConsoleOpen(false)}
-                  className="p-1 hover:bg-zinc-800 rounded transition-colors text-zinc-500 hover:text-white cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="flex-1 p-3 overflow-y-auto bg-zinc-950 space-y-1 select-text">
-                {consoleLogs.map((log, index) => (
-                  <div key={index} className="flex gap-2">
-                    <span className="text-zinc-650">[{new Date().toLocaleTimeString()}]</span>
-                    <span className={
-                      log.includes('[success]') ? 'text-emerald-450' :
-                      log.includes('[debug]') ? 'text-indigo-400' : 'text-zinc-300'
-                    }>{log}</span>
+            {activeSidebarTab === 'properties' && (
+              <PropertyInspector
+                selectedComponent={getSelectedComponent()}
+                onUpdateProps={updateComponentProps}
+                onUpdateComponentLayoutMode={updateComponentLayoutMode}
+                pageSettings={pageSettings}
+                onUpdatePageSettings={updatePageSettings}
+              />
+            )}
+            {activeSidebarTab === 'code' && (
+              <CodeEditor
+                code={isManualCodeEditing ? manualCode : generatedCode}
+                canvasCode={generatedCode}
+                isManualMode={isManualCodeEditing}
+                onChangeCode={setManualCode}
+                onToggleManualMode={setIsManualCodeEditing}
+                onSyncToCanvas={handleSyncToCanvas}
+                onDiscardChanges={handleDiscardChanges}
+                onExport={handleExportCode}
+                onExportReactProject={handleExportReactProject}
+              />
+            )}
+            {activeSidebarTab === 'preview' && (
+              <div className="flex-1 flex flex-col min-h-0 bg-zinc-950">
+                {/* Header info */}
+                <div className="p-3 border-b border-zinc-800 flex items-center justify-between text-xs font-semibold text-zinc-400 select-none">
+                  <span>Mini Live Preview</span>
+                  <span className="text-[10px] text-zinc-600">Scaled to fit w-80</span>
+                </div>
+                {/* Scaled Sandbox Preview Container for Pane 2 Sidebar fitting */}
+                <div className="flex-1 p-4 flex items-center justify-center bg-zinc-900/40 relative overflow-hidden">
+                  <div className="preview-scaled-container border border-zinc-800 rounded-lg shadow-2xl relative" style={{ width: '280px', height: '400px' }}>
+                    <iframe
+                      title="Scaled Preview"
+                      srcDoc={sandboxHtml}
+                      sandbox="allow-scripts"
+                      className="preview-scaled-iframe bg-zinc-950 absolute"
+                      style={{
+                        width: '1280px',
+                        height: '1828px',
+                        transform: 'scale(0.21875)', /* 280 / 1280 */
+                      }}
+                    />
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Split Panel (collapsible) */}
-        {isCodePaneOpen && (
-          <div className="w-[420px] xl:w-[480px] border-l border-zinc-850 flex flex-col h-full min-h-0 flex-shrink-0 z-10 shadow-md">
-            <CodeEditor
-              code={isManualCodeEditing ? manualCode : generatedCode}
-              canvasCode={generatedCode}
-              isManualMode={isManualCodeEditing}
-              onChangeCode={setManualCode}
-              onToggleManualMode={setIsManualCodeEditing}
-              onSyncToCanvas={handleSyncToCanvas}
-              onDiscardChanges={handleDiscardChanges}
-              onExport={handleExportCode}
-            />
-            {isPreviewDetached ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center bg-zinc-950 border-t border-zinc-850 select-none">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 animate-pulse">
-                  <ExternalLink className="w-5 h-5" />
-                </div>
-                <h4 className="text-xs font-bold text-white">Live Preview Detached</h4>
-                <p className="text-[10px] text-zinc-500 mt-1 max-w-[200px] leading-relaxed">
-                  Rendering in a separate browser tab. Real-time visual updates are active.
-                </p>
-                <div className="flex gap-2 mt-4">
-                  <button
-                    onClick={reDockPreview}
-                    className="px-3 py-1 rounded text-[10px] font-bold bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer"
-                  >
-                    Re-dock Preview
-                  </button>
-                  <button
-                    onClick={detachPreview}
-                    className="px-3 py-1 rounded text-[10px] font-bold bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
-                  >
-                    Refocus Tab
-                  </button>
                 </div>
               </div>
-            ) : (
-              <LivePreview fullHtml={sandboxHtml} />
+            )}
+            {activeSidebarTab === 'console' && (
+              <div className="flex-1 flex flex-col min-h-0 bg-[#0a0a0a] text-zinc-400 font-mono text-[11px] select-text">
+                <div className="p-3 border-b border-zinc-800 flex items-center justify-between text-xs text-zinc-300 font-sans select-none">
+                  <span className="font-semibold">Terminal Console Output</span>
+                  <span className="text-[10px] text-zinc-650">Active compiler logs</span>
+                </div>
+                <div className="flex-1 p-3 overflow-y-auto space-y-1">
+                  {consoleLogs.length > 0 ? (
+                    consoleLogs.map((log, index) => (
+                      <div key={index} className="flex gap-1.5 text-[10px]">
+                        <span className={
+                          log.includes('[success]') ? 'text-emerald-450' :
+                          log.includes('[warning]') ? 'text-amber-450' :
+                          log.includes('[error]') ? 'text-rose-450' :
+                          log.includes('[debug]') ? 'text-indigo-400' : 'text-zinc-300'
+                        }>{log}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-zinc-600 text-[10px] italic">No processes active</div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         )}
 
-        {/* Far Right Sidebar: Style & Properties Inspector (collapsible) */}
-        {isRightSidebarOpen && (
-          <PropertyInspector
-            selectedComponent={getSelectedComponent()}
-            onUpdateProps={updateComponentProps}
-            pageSettings={pageSettings}
-            onUpdatePageSettings={updatePageSettings}
-          />
-        )}
+        {/* Pane 3 (Main Workspace): Visual Canvas Area */}
+        <div className="flex-1 flex flex-col h-full min-h-0 relative bg-[#0a0a0a]">
+          {isDetached ? (
+            <div className="flex-grow flex flex-col items-center justify-center p-12 text-center bg-zinc-950 grid-bg-dark border-r border-zinc-900 select-none h-full">
+              <div className="w-16 h-16 rounded-2xl bg-indigo-950/30 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mb-6 animate-pulse">
+                <ExternalLink className="w-8 h-8" />
+              </div>
+              <h3 className="text-sm font-bold text-white">Visual Workspace Detached</h3>
+              <p className="text-xs text-zinc-400 mt-2 max-w-[340px] leading-relaxed">
+                The visual canvas window is currently operating in an isolated frame window. Changes synchronize automatically.
+              </p>
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={reDockCanvas}
+                  className="px-5 py-2 rounded-lg text-xs font-bold bg-indigo-650 hover:bg-indigo-600 text-white shadow-lg transition-all cursor-pointer"
+                >
+                  Re-dock Workspace Here
+                </button>
+              </div>
+            </div>
+          ) : (
+            <VisualCanvas
+              components={components}
+              selectedId={selectedId}
+              breakpoint={breakpoint}
+              onSelectComponent={handleCanvasSelect}
+              onDeleteComponent={handleCanvasDelete}
+              onDuplicateComponent={handleCanvasDuplicate}
+              onMoveComponent={handleCanvasMove}
+              onDropComponent={handleCanvasDrop}
+              onChangeBreakpoint={handleCanvasBreakpoint}
+              pageSettings={pageSettings}
+              onUpdateComponentProps={updateComponentProps}
+            />
+          )}
+        </div>
 
       </div>
 
@@ -1383,6 +1471,12 @@ export default function App() {
         canUndo={past.length > 0}
         canRedo={future.length > 0}
         hasClipboard={!!clipboard}
+      />
+
+      <GitHubPanel
+        isOpen={isGitHubModalOpen}
+        onClose={() => setIsGitHubModalOpen(false)}
+        exportHtml={sandboxHtml}
       />
     </div>
   );

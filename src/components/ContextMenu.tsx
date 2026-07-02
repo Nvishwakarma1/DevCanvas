@@ -49,7 +49,7 @@ export default function ContextMenu({
       <button
         onClick={() => { onAction('undo'); onClose(); }}
         disabled={!canUndo}
-        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-violet-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
       >
         <Undo2 className="w-3.5 h-3.5" />
         <span>Undo</span>
@@ -58,7 +58,7 @@ export default function ContextMenu({
       <button
         onClick={() => { onAction('redo'); onClose(); }}
         disabled={!canRedo}
-        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-violet-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
       >
         <Redo2 className="w-3.5 h-3.5" />
         <span>Redo</span>
@@ -70,7 +70,7 @@ export default function ContextMenu({
       <button
         onClick={() => { onAction('copy'); onClose(); }}
         disabled={!hasSelection}
-        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-violet-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
       >
         <Copy className="w-3.5 h-3.5" />
         <span>Copy</span>
@@ -79,7 +79,7 @@ export default function ContextMenu({
       <button
         onClick={() => { onAction('paste'); onClose(); }}
         disabled={!hasClipboard}
-        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-violet-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
       >
         <ClipboardPaste className="w-3.5 h-3.5" />
         <span>Paste</span>
@@ -91,7 +91,7 @@ export default function ContextMenu({
       <button
         onClick={() => { onAction('duplicate'); onClose(); }}
         disabled={!hasSelection}
-        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-indigo-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
+        className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-violet-600 hover:text-white disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-zinc-500 transition-colors"
       >
         <CopyPlus className="w-3.5 h-3.5" />
         <span>Duplicate</span>

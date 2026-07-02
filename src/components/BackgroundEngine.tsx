@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react';
+import WebGLCanvas from '../webgl/components/WebGLCanvas';
+import type { PageSettings } from '../types/canvas';
 
 interface BackgroundEngineProps {
-  preset: 'none' | 'particles' | 'animated-gradient' | 'mouse-trail';
+  preset: 'none' | 'particles' | 'animated-gradient' | 'mouse-trail' | 'aurora-webgl';
+  settings?: PageSettings;
+  /** Phase 3.5 — When true, background renders at reduced opacity during active IDE work */
+  dimmed?: boolean;
 }
 
-export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
+export default function BackgroundEngine({ preset, settings, dimmed = false }: BackgroundEngineProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef({ x: -1000, y: -1000, active: false });
 
@@ -47,24 +52,22 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
         this.vx = (Math.random() - 0.5) * 0.8;
         this.vy = (Math.random() - 0.5) * 0.8;
         this.radius = Math.random() * 2 + 1;
-        this.color = `rgba(${Math.floor(Math.random() * 40 + 99)}, ${Math.floor(
-          Math.random() * 40 + 102
-        )}, 241, ${Math.random() * 0.2 + 0.15})`;
+        // Phase 3.1 — Use Etherium Purple particle color
+        this.color = `rgba(${Math.floor(Math.random() * 30 + 124)}, ${Math.floor(
+          Math.random() * 30 + 58
+        )}, 237, ${Math.random() * 0.2 + 0.15})`;
         this.baseX = this.x;
         this.baseY = this.y;
       }
 
       update() {
         if (preset === 'particles') {
-          // Normal floating drift
           this.x += this.vx;
           this.y += this.vy;
 
-          // Bounce boundaries
           if (this.x < 0 || this.x > width) this.vx *= -1;
           if (this.y < 0 || this.y > height) this.vy *= -1;
 
-          // Avoid mouse interaction
           const dx = mouseRef.current.x - this.x;
           const dy = mouseRef.current.y - this.y;
           const dist = Math.sqrt(dx * dx + dy * dy);
@@ -104,10 +107,11 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
         this.size = Math.random() * 3 + 1;
+        // Phase 3.1 — Solar Core + Etherium Purple sparks
         const colors = [
-          'rgba(99, 102, 241, ', // Indigo
-          'rgba(16, 185, 129, ', // Emerald
-          'rgba(244, 63, 94, '   // Rose
+          'rgba(124, 58, 237, ',  // Etherium Purple
+          'rgba(245, 158, 11, ',  // Solar Core
+          'rgba(139, 92, 246, '   // Violet light
         ];
         this.color = colors[Math.floor(Math.random() * colors.length)];
         this.life = 0;
@@ -117,7 +121,7 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
       update() {
         this.x += this.vx;
         this.y += this.vy;
-        this.vy += 0.02; // gravity effect
+        this.vy += 0.02;
         this.life++;
       }
 
@@ -161,7 +165,6 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
       mouseRef.current.active = false;
     };
 
-    // Attach mouse listeners to window to capture drag/moves over canvas
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseleave', handleMouseLeave);
 
@@ -169,8 +172,8 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
       ctx.clearRect(0, 0, width, height);
 
       if (preset === 'particles') {
-        // Draw connections
-        ctx.strokeStyle = 'rgba(99, 102, 241, 0.04)';
+        // Phase 3.1 — Etherium Purple connection lines
+        ctx.strokeStyle = 'rgba(124, 58, 237, 0.05)';
         ctx.lineWidth = 0.5;
         for (let i = 0; i < particles.length; i++) {
           for (let j = i + 1; j < particles.length; j++) {
@@ -217,13 +220,24 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
 
   if (preset === 'none') return null;
 
+  // Phase 3.5 — Dimming wrapper: CSS opacity transition
+  const dimClass = dimmed ? 'bg-engine-dim' : 'bg-engine-full';
+
+  if (preset === 'aurora-webgl') {
+    return (
+      <div className={dimClass}>
+        <WebGLCanvas settings={settings} dimmed={dimmed} />
+      </div>
+    );
+  }
+
   if (preset === 'animated-gradient') {
     return (
-      <div className="absolute inset-0 w-full h-full -z-10 bg-zinc-950 overflow-hidden pointer-events-none select-none">
-        {/* Animated Neon Mesh Blob Gradients */}
-        <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-indigo-900/15 blur-[120px] animate-[pulse_8s_infinite]" />
-        <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[85%] rounded-full bg-emerald-950/15 blur-[130px] animate-[pulse_10s_infinite_2s]" />
-        <div className="absolute top-[30%] left-[40%] w-[50%] h-[50%] rounded-full bg-rose-950/10 blur-[110px] animate-[pulse_12s_infinite_4s]" />
+      <div className={`absolute inset-0 w-full h-full -z-10 bg-zinc-950 overflow-hidden pointer-events-none select-none ${dimClass}`}>
+        {/* Phase 3.1 — Etherium Purple + Solar Core gradient blobs */}
+        <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] rounded-full bg-violet-900/12 blur-[120px] animate-[pulse_8s_infinite]" />
+        <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[85%] rounded-full bg-amber-900/10 blur-[130px] animate-[pulse_10s_infinite_2s]" />
+        <div className="absolute top-[30%] left-[40%] w-[50%] h-[50%] rounded-full bg-violet-800/8 blur-[110px] animate-[pulse_12s_infinite_4s]" />
       </div>
     );
   }
@@ -231,7 +245,7 @@ export default function BackgroundEngine({ preset }: BackgroundEngineProps) {
   return (
     <canvas
       ref={canvasRef}
-      className="absolute inset-0 w-full h-full -z-10 pointer-events-none bg-stone-950/40"
+      className={`absolute inset-0 w-full h-full -z-10 pointer-events-none bg-stone-950/40 ${dimClass}`}
     />
   );
 }
